@@ -10,7 +10,7 @@
     "run": "web-ext run --source-dir dist",
     "run:android": "web-ext run --source-dir dist --target firefox-android --android-device R5CR30CHXRE --firefox-apk org.mozilla.fenix",
     "sign": "web-ext sign --source-dir dist --channel=listed",
-    "sign:unlisted": "web-ext sign --source-dir dist --channel=unlisted"
+    "sign:unlisted": "web-ext sign --source-dir dist --channel=unlisted --api-key=<api-key> --api-secret=<api-secret>"
   },
   "dependencies": {
     "@soundtouchjs/audio-worklet": "^2.1.1"
