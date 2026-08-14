@@ -2,13 +2,13 @@
  * Routes the YouTube <video> element's audio through a tempo-preserving pitch
  * shifter (SoundTouchJS AudioWorklet) and adds a floating control panel.
  */
-import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
-
 (() => {
   'use strict';
 
   const MIN_SEMITONES = -12;
   const MAX_SEMITONES = 12;
+  // Processor name registered by dist/soundtouch-processor.js.
+  const PROCESSOR_NAME = 'soundtouch-processor';
 
   const browserAPI = typeof browser !== 'undefined' ? browser : null;
 
@@ -99,8 +99,13 @@ import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
   function applyPitch() {
     if (!state.stNode) return;
     const semitones = state.enabled ? state.semitones : 0;
-    if (state.stNode.pitch) state.stNode.pitch.value = 1;
-    if (state.stNode.pitchSemitones) state.stNode.pitchSemitones.value = semitones;
+    const params = state.stNode.parameters;
+    const pitch = params.get('pitch');
+    const pitchSemitones = params.get('pitchSemitones');
+    const playbackRate = params.get('playbackRate');
+    if (pitch) pitch.value = 1;
+    if (pitchSemitones) pitchSemitones.value = semitones;
+    if (playbackRate) playbackRate.value = 1;
   }
 
   async function attachVideo(video) {
@@ -137,19 +142,36 @@ import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
     }
 
     let stNode = null;
+
+    // 1) Load the processor module into this AudioContext (once per page).
     try {
       if (!engine.workletRegistered) {
-        await SoundTouchNode.register(ctx, processorUrl());
+        await ctx.audioWorklet.addModule(processorUrl());
         engine.workletRegistered = true;
       }
-      // Pass interpolationStrategy explicitly. When omitted, the library puts
-      // `undefined` inside processorOptions, and Firefox's AudioWorkletNode
-      // constructor throws DataCloneError ("The object could not be cloned").
-      // 'lanczos' is the library's default anyway.
-      stNode = new SoundTouchNode({ context: ctx, interpolationStrategy: 'lanczos' });
     } catch (err) {
-      console.warn('[Karaoke Pitch] pitch shifter unavailable — audio unmodified:', err);
-      stNode = null;
+      console.warn('[Karaoke Pitch] worklet addModule failed:', err && err.name, err && err.message, err);
+    }
+
+    // 2) Build a raw AudioWorkletNode (bypasses the library wrapper so we fully
+    //    control the options object that Firefox structured-clones).
+    if (engine.workletRegistered) {
+      try {
+        stNode = new AudioWorkletNode(ctx, PROCESSOR_NAME, {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [2]
+        });
+      } catch (err) {
+        console.warn('[Karaoke Pitch] AudioWorkletNode(options) failed:', err && err.name, err && err.message);
+        try {
+          stNode = new AudioWorkletNode(ctx, PROCESSOR_NAME);
+        } catch (err2) {
+          console.warn('[Karaoke Pitch] AudioWorkletNode() failed:', err2 && err2.name, err2 && err2.message, err2);
+          stNode = null;
+        }
+      }
+      if (stNode) console.info('[Karaoke Pitch] pitch shifter ready');
     }
 
     if (stNode) {
