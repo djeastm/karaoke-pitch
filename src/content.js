@@ -341,7 +341,7 @@
 
     const warn = document.createElement('div');
     warn.className = 'kp-warn';
-    warn.textContent = '\u26A0 No audio detected \u2014 the site may block audio access.';
+    warn.textContent = '\u26A0 Awaiting audio...';
     warn.hidden = true;
 
     body.append(row, row2, warn);
