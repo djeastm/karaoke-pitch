@@ -8,7 +8,9 @@
     "build": "node build.js",
     "lint": "web-ext lint --source-dir dist",
     "run": "web-ext run --source-dir dist",
-    "sign": "web-ext sign --source-dir dist --channel=listed"
+    "run:android": "web-ext run --source-dir dist --target firefox-android --android-device R5CR30CHXRE --firefox-apk org.mozilla.fenix",
+    "sign": "web-ext sign --source-dir dist --channel=listed",
+    "sign:unlisted": "web-ext sign --source-dir dist --channel=unlisted"
   },
   "dependencies": {
     "@soundtouchjs/audio-worklet": "^2.1.1"
