@@ -5,7 +5,7 @@
   "description": "Shift a YouTube video's pitch up or down without changing tempo, to make karaoke songs easier to sing.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "karaoke-pitch@example.com",
+      "id": "karaoke-pitch@davidjeastman.com",
       "strict_min_version": "120.0",
       "data_collection_permissions": {
         "required": ["none"]
