@@ -1,0 +1,152 @@
+.kp-panel {
+  position: fixed;
+  top: 132px;
+  right: 16px;
+  z-index: 2147483646;
+  width: 240px;
+  background: rgba(24, 24, 24, 0.94);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+
+.kp-handle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: grab;
+  touch-action: none;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.kp-handle:active {
+  cursor: grabbing;
+}
+
+.kp-title {
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  pointer-events: none;
+}
+
+.kp-iconbtn {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  touch-action: manipulation;
+}
+
+.kp-iconbtn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.kp-body {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kp-row2 {
+  justify-content: space-between;
+}
+
+.kp-btn {
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.09);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+}
+
+.kp-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.kp-btn:active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.kp-btn-small {
+  font-size: 12px;
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+}
+
+.kp-slider {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  accent-color: #ff0033;
+  touch-action: manipulation;
+}
+
+.kp-value {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kp-warn {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #ffe08a;
+  background: rgba(255, 0, 0, 0.18);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.kp-panel.kp-disabled .kp-body {
+  opacity: 0.55;
+}
+
+.kp-btn.kp-off {
+  opacity: 0.55;
+}
+
+.kp-panel.kp-collapsed .kp-body {
+  display: none;
+}
+
+.kp-panel.kp-dragging {
+  opacity: 0.85;
+}
+
+@media (max-width: 600px) {
+  .kp-panel {
+    width: 212px;
+  }
+
+  .kp-btn {
+    min-width: 44px;
+    height: 44px;
+  }
+}

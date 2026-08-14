@@ -1,0 +1,20 @@
+{
+  "name": "karaoke-pitch",
+  "version": "0.1.0",
+  "description": "Firefox extension that shifts a YouTube video's pitch up or down (tempo preserved) to make karaoke songs easier to sing.",
+  "private": true,
+  "license": "MPL-2.0",
+  "scripts": {
+    "build": "node build.js",
+    "lint": "web-ext lint --source-dir dist",
+    "run": "web-ext run --source-dir dist",
+    "sign": "web-ext sign --source-dir dist --channel=listed"
+  },
+  "dependencies": {
+    "@soundtouchjs/audio-worklet": "^2.1.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "web-ext": "^8.0.0"
+  }
+}

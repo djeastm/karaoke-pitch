@@ -1,0 +1,12 @@
+This extension includes the following third-party software:
+
+SoundTouchJS (@soundtouchjs/audio-worklet, version 2.1.1)
+- License: Mozilla Public License 2.0 (MPL-2.0)
+- Copyright: Steve 'Cutter' Blades and contributors
+- Based on the SoundTouch C++ library by Olli Parviainen.
+- Source: https://github.com/cutterbl/SoundTouchJS
+
+The main-thread code is bundled into content.js by esbuild. The AudioWorklet
+processor file is redistributed unmodified as soundtouch-processor.js.
+
+Full license text: https://www.mozilla.org/MPL/2.0/
