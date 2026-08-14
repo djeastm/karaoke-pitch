@@ -72,15 +72,23 @@ Release Firefox for Android only installs add-ons listed on
    to list the add-on for Firefox for Android) and
    `data_collection_permissions` (this extension collects nothing).
 2. Run `npm run lint` and fix any warnings.
-3. Sign and submit:
+3. Set your AMO API credentials as environment variables (create them at
+   <https://addons.mozilla.org/developers/addon/api/key/>):
+
+   ```sh
+   export WEB_EXT_API_KEY=user:123456:789
+   export WEB_EXT_API_SECRET=your-secret
+   ```
+
+   Then sign and submit:
 
    ```sh
    npm run sign
    ```
 
-   `web-ext sign` prompts for your AMO API credentials and uploads the package.
-   You can also upload the `dist/` ZIP manually at
-   <https://addons.mozilla.org/developers/>.
+   The listing metadata (summary, category, license) comes from
+   `amo-metadata.json`. `web-ext sign` uploads the package to AMO; you can also
+   upload the `dist/` ZIP manually at <https://addons.mozilla.org/developers/>.
 
 ## Limitations
 

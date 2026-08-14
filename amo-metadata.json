@@ -1,0 +1,9 @@
+{
+  "summary": {
+    "en-US": "Shift a YouTube video's pitch up or down without changing the tempo, so you can sing along to karaoke songs in a comfortable key."
+  },
+  "categories": ["photos-music-videos"],
+  "version": {
+    "license": "MPL-2.0"
+  }
+}
