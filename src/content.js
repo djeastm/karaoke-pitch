@@ -142,7 +142,11 @@ import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
         await SoundTouchNode.register(ctx, processorUrl());
         engine.workletRegistered = true;
       }
-      stNode = new SoundTouchNode({ context: ctx });
+      // Pass interpolationStrategy explicitly. When omitted, the library puts
+      // `undefined` inside processorOptions, and Firefox's AudioWorkletNode
+      // constructor throws DataCloneError ("The object could not be cloned").
+      // 'lanczos' is the library's default anyway.
+      stNode = new SoundTouchNode({ context: ctx, interpolationStrategy: 'lanczos' });
     } catch (err) {
       console.warn('[Karaoke Pitch] pitch shifter unavailable — audio unmodified:', err);
       stNode = null;
