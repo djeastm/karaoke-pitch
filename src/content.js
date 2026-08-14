@@ -246,7 +246,7 @@
   function updateUI() {
     const s = state.semitones;
     if (state.valueEl) {
-      state.valueEl.textContent = s === 0 ? '0 st (original key)' : `${s > 0 ? '+' : ''}${s} st`;
+      state.valueEl.textContent = s === 0 ? '0 st' : `${s > 0 ? '+' : ''}${s} st`;
     }
     if (state.slider) state.slider.value = String(s);
     if (state.toggleBtn) {
