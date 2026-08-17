@@ -21,6 +21,9 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   `MediaElementAudioSourceNode` does not apply them itself.
 - The floating panel is draggable (mouse and touch) and its setting is saved
   with `browser.storage.local`.
+- The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
+  to show or hide it — handy for turning it off when you're not watching a
+  karaoke video. The button shows an `ON` badge while the panel is enabled.
 
 ## Requirements
 
@@ -45,8 +48,9 @@ npm run run
 ```
 
 `web-ext run` launches a temporary Firefox profile with the extension loaded.
-Open a karaoke video, use **− / +** or the slider, and confirm the key changes
-while the tempo stays the same. Then verify:
+Click the toolbar button to show the panel, then open a karaoke video and use
+**− / +** or the slider, and confirm the key changes while the tempo stays the
+same. Then verify:
 
 - Navigating between videos and refreshing keeps working (no console errors
   about `createMediaElementSource`).

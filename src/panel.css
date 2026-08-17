@@ -115,15 +115,6 @@
   white-space: nowrap;
 }
 
-.kp-warn {
-  font-size: 11px;
-  line-height: 1.35;
-  color: #ffe08a;
-  background: rgba(255, 0, 0, 0.18);
-  border-radius: 6px;
-  padding: 6px 8px;
-}
-
 .kp-panel.kp-disabled .kp-body {
   opacity: 0.55;
 }

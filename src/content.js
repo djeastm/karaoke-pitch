@@ -26,15 +26,13 @@
     source: null,
     stNode: null,
     gain: null,
-    analyser: null,
     semitones: 0,
     enabled: true,
-    silentWarn: false,
+    showPanel: false,
     panel: null,
     slider: null,
     valueEl: null,
     toggleBtn: null,
-    warnEl: null,
   };
 
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
@@ -42,9 +40,10 @@
   /* ---------- persistence ---------- */
   async function loadSettings() {
     try {
-      const res = await browserAPI.storage.local.get({ semitones: 0, enabled: true });
+      const res = await browserAPI.storage.local.get({ semitones: 0, enabled: true, showPanel: false });
       state.semitones = clamp(Math.round(Number(res.semitones) || 0), MIN_SEMITONES, MAX_SEMITONES);
       state.enabled = res.enabled !== false;
+      state.showPanel = res.showPanel === true;
     } catch (e) {
       /* fall back to defaults */
     }
@@ -130,17 +129,6 @@
     gain.gain.value = 1;
     state.gain = gain;
 
-    // Side tap for silent-stream detection; it does not affect the signal path.
-    let analyser = null;
-    try {
-      analyser = ctx.createAnalyser();
-      analyser.fftSize = 256;
-      source.connect(analyser);
-      state.analyser = analyser;
-    } catch (e) {
-      /* ignore */
-    }
-
     let stNode = null;
 
     // 1) Load the processor module into this AudioContext (once per page).
@@ -202,12 +190,10 @@
     if (state.source) { try { state.source.disconnect(); } catch (e) {} }
     if (state.stNode) { try { state.stNode.disconnect(); } catch (e) {} }
     if (state.gain) { try { state.gain.disconnect(); } catch (e) {} }
-    if (state.analyser) { try { state.analyser.disconnect(); } catch (e) {} }
     state.video = null;
     state.source = null;
     state.stNode = null;
     state.gain = null;
-    state.analyser = null;
     updatePanelVisibility();
   }
 
@@ -240,7 +226,7 @@
   /* ---------- UI ---------- */
   function updatePanelVisibility() {
     if (!state.panel) return;
-    state.panel.style.display = state.video ? '' : 'none';
+    state.panel.style.display = state.video && state.showPanel ? '' : 'none';
   }
 
   function updateUI() {
@@ -339,12 +325,7 @@
 
     row2.append(valueEl, reset, toggle);
 
-    const warn = document.createElement('div');
-    warn.className = 'kp-warn';
-    warn.textContent = '\u26A0 Awaiting audio...';
-    warn.hidden = true;
-
-    body.append(row, row2, warn);
+    body.append(row, row2);
     panel.append(handle, body);
     document.body.appendChild(panel);
 
@@ -352,7 +333,6 @@
     state.slider = slider;
     state.valueEl = valueEl;
     state.toggleBtn = toggle;
-    state.warnEl = warn;
 
     slider.addEventListener('input', () => setSemitones(slider.value));
     minus.addEventListener('click', () => step(-1));
@@ -414,25 +394,15 @@
     handle.addEventListener('pointercancel', endDrag);
   }
 
-  /* ---------- silent-stream warning ---------- */
-  function startSilenceWatch() {
-    setInterval(() => {
-      if (!state.analyser || !state.video || !state.warnEl) return;
-      const playing = !state.video.paused && !state.video.ended && state.video.readyState >= 2;
-      if (!playing) return;
-      const data = new Uint8Array(state.analyser.fftSize);
-      state.analyser.getByteTimeDomainData(data);
-      let sum = 0;
-      for (let i = 0; i < data.length; i++) {
-        const v = (data[i] - 128) / 128;
-        sum += v * v;
+  /* ---------- toolbar toggle ---------- */
+  function initMessaging() {
+    if (!browserAPI || !browserAPI.runtime || !browserAPI.runtime.onMessage) return;
+    browserAPI.runtime.onMessage.addListener((msg) => {
+      if (msg && msg.type === 'setShowPanel') {
+        state.showPanel = msg.value === true;
+        updatePanelVisibility();
       }
-      const audible = Math.sqrt(sum / data.length) > 0.01;
-      if (state.silentWarn !== !audible) {
-        state.silentWarn = !audible;
-        state.warnEl.hidden = audible;
-      }
-    }, 2000);
+    });
   }
 
   /* ---------- init ---------- */
@@ -442,7 +412,7 @@
     buildPanel();
     checkVideo();
     startObserving();
-    startSilenceWatch();
+    initMessaging();
   }
 
   init().catch((err) => console.warn('[Karaoke Pitch] init failed:', err));
