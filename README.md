@@ -23,8 +23,10 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   with `browser.storage.local`.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
   to show or hide it — handy for turning it off when you're not watching a
-  karaoke video. The button is gray when the panel is hidden and turns
-  full-color with an `ON` badge while it's enabled.
+  karaoke video. The toolbar button is a master switch: hiding the panel also
+  disables the pitch effect (audio reverts to normal) and showing it re-enables
+  it. The button is gray when the panel is hidden and turns full-color with an
+  `ON` badge while it's enabled.
 
 ## Requirements
 

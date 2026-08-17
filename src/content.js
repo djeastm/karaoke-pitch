@@ -400,6 +400,12 @@
     browserAPI.runtime.onMessage.addListener((msg) => {
       if (msg && msg.type === 'setShowPanel') {
         state.showPanel = msg.value === true;
+        // The toolbar button is a master switch: hiding the panel also disables
+        // the pitch effect (audio reverts to normal), showing it re-enables it.
+        state.enabled = state.showPanel;
+        applyPitch();
+        updateUI();
+        saveSettings();
         updatePanelVisibility();
       }
     });
