@@ -25,6 +25,7 @@ copy(path.join(srcDir, 'panel.css'), path.join(distDir, 'panel.css'));
 copy(path.join(srcDir, 'background.js'), path.join(distDir, 'background.js'));
 copy(path.join(srcDir, 'THIRD_PARTY_NOTICES.txt'), path.join(distDir, 'THIRD_PARTY_NOTICES.txt'));
 copy(path.join(srcDir, 'icons', 'icon.svg'), path.join(distDir, 'icons', 'icon.svg'));
+copy(path.join(srcDir, 'icons', 'icon-disabled.svg'), path.join(distDir, 'icons', 'icon-disabled.svg'));
 copy(processorPath, path.join(distDir, 'soundtouch-processor.js'));
 
 esbuild.buildSync({

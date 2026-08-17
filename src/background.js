@@ -11,7 +11,9 @@
     return browser.storage.local.get({ [KEY]: false }).then((res) => res[KEY] === true);
   }
 
-  function updateBadge(value) {
+  function updateAction(value) {
+    // Grayed-out icon when the panel is hidden, full-color when shown.
+    browser.action.setIcon({ path: value ? 'icons/icon.svg' : 'icons/icon-disabled.svg' });
     browser.action.setBadgeText({ text: value ? 'ON' : '' });
     browser.action.setBadgeBackgroundColor({ color: value ? '#2e7d32' : '#666666' });
     browser.action.setTitle({
@@ -19,9 +21,9 @@
     });
   }
 
-  async function refreshBadge() {
+  async function refreshAction() {
     try {
-      updateBadge(await getShowPanel());
+      updateAction(await getShowPanel());
     } catch (e) {
       /* storage unavailable */
     }
@@ -37,9 +39,9 @@
     }
 
     try {
-      updateBadge(next);
+      updateAction(next);
     } catch (e) {
-      /* badge APIs may be unavailable (e.g., Firefox for Android) */
+      /* action APIs may be unavailable (e.g., Firefox for Android) */
     }
 
     // Notify every open tab so the panel reacts immediately; tabs without the
@@ -55,5 +57,5 @@
     }
   });
 
-  refreshBadge();
+  refreshAction();
 })();
