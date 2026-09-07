@@ -3,7 +3,8 @@
   top: 132px;
   right: 16px;
   z-index: 2147483646;
-  width: 240px;
+  width: 290px;
+  max-width: calc(100vw - 32px);
   background: rgba(24, 24, 24, 0.94);
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.16);
@@ -68,6 +69,7 @@
 
 .kp-row2 {
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 
 .kp-btn {
@@ -102,6 +104,25 @@
   padding: 0 10px;
 }
 
+.kp-save {
+  white-space: nowrap;
+}
+
+.kp-btn.kp-saved {
+  border-color: #70d6a0;
+  color: #a3edc3;
+}
+
+.kp-btn:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.kp-btn:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 .kp-slider {
   flex: 1 1 auto;
   min-width: 0;
@@ -133,7 +154,7 @@
 
 @media (max-width: 600px) {
   .kp-panel {
-    width: 212px;
+    width: 290px;
   }
 
   .kp-btn {

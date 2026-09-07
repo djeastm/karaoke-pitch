@@ -33,11 +33,87 @@
     slider: null,
     valueEl: null,
     toggleBtn: null,
+    saveBtn: null,
+    videoId: null,
+    savedPitch: null,
+    savedPitchReady: false,
+    restoreSavedPitch: true,
+    savingPitch: false,
+    saveError: false,
   };
 
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+  const formatPitch = (s) => `${s > 0 ? '+' : ''}${s} st`;
+  const savedPitchKey = (videoId) => `savedPitch:${videoId}`;
+  let savedPitchRequest = 0;
 
   /* ---------- persistence ---------- */
+  function currentVideoId() {
+    const url = new URL(window.location.href);
+    const id = url.pathname === '/watch'
+      ? url.searchParams.get('v')
+      : url.pathname.match(/^\/(?:shorts|embed|live)\/([^/]+)/)?.[1];
+    return id && /^[\w-]{11}$/.test(id) ? id : null;
+  }
+
+  async function syncSavedPitch() {
+    const videoId = currentVideoId();
+    if (videoId === state.videoId) return;
+    const request = ++savedPitchRequest;
+    state.videoId = videoId;
+    state.savedPitch = null;
+    state.savedPitchReady = false;
+    state.restoreSavedPitch = true;
+    state.savingPitch = false;
+    state.saveError = false;
+    updateSaveButton();
+    if (!videoId) return;
+
+    try {
+      const key = savedPitchKey(videoId);
+      const result = await browserAPI.storage.local.get(key);
+      if (request !== savedPitchRequest) return;
+      const pitch = result[key];
+      state.savedPitch = Number.isInteger(pitch) && pitch >= MIN_SEMITONES && pitch <= MAX_SEMITONES
+        ? pitch : null;
+      state.savedPitchReady = true;
+    } catch (e) {
+      if (request !== savedPitchRequest) return;
+      state.saveError = true;
+    }
+    updateSaveButton();
+  }
+
+  async function saveOrRestorePitch() {
+    // Navigation can reuse the same <video> and precede its DOM mutations.
+    if (currentVideoId() !== state.videoId) {
+      syncSavedPitch();
+      return;
+    }
+    if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
+    if (state.restoreSavedPitch && state.savedPitch !== null) {
+      setSemitones(state.savedPitch);
+      return;
+    }
+
+    const request = savedPitchRequest;
+    const videoId = state.videoId;
+    const pitch = state.semitones;
+    state.savingPitch = true;
+    state.saveError = false;
+    updateSaveButton();
+    try {
+      await browserAPI.storage.local.set({ [savedPitchKey(videoId)]: pitch });
+      if (request !== savedPitchRequest) return;
+      state.savedPitch = pitch;
+    } catch (e) {
+      if (request !== savedPitchRequest) return;
+      state.saveError = true;
+    }
+    state.savingPitch = false;
+    updateSaveButton();
+  }
+
   async function loadSettings() {
     try {
       const res = await browserAPI.storage.local.get({ semitones: 0, enabled: true, showPanel: false });
@@ -201,6 +277,7 @@
   const findVideo = () => document.querySelector('video');
 
   function checkVideo() {
+    syncSavedPitch();
     const current = findVideo();
     if (current === state.video) return;
     if (state.video && !state.video.isConnected) detachVideo();
@@ -221,6 +298,8 @@
   function startObserving() {
     const observer = new MutationObserver(scheduleCheck);
     observer.observe(document.documentElement, { childList: true, subtree: true });
+    document.addEventListener('yt-navigate-finish', scheduleCheck);
+    window.addEventListener('popstate', scheduleCheck);
   }
 
   /* ---------- UI ---------- */
@@ -240,17 +319,51 @@
       state.toggleBtn.classList.toggle('kp-off', !state.enabled);
     }
     if (state.panel) state.panel.classList.toggle('kp-disabled', !state.enabled);
+    updateSaveButton();
+  }
+
+  function updateSaveButton() {
+    const button = state.saveBtn;
+    if (!button) return;
+    const hasSavedPitch = state.savedPitch !== null;
+    const matches = hasSavedPitch && state.savedPitch === state.semitones;
+    const canRestore = hasSavedPitch && state.restoreSavedPitch && !matches;
+    let label = 'Save';
+    let title = `Save ${formatPitch(state.semitones)} for this video`;
+    if (!state.videoId) {
+      title = 'Open a YouTube video to save its pitch';
+    } else if (state.savingPitch) {
+      label = 'Saving…';
+      title = 'Saving pitch for this video';
+    } else if (state.saveError) {
+      label = state.savedPitchReady ? 'Retry save' : 'Unavailable';
+      title = state.savedPitchReady ? 'Could not save pitch. Click to try again.' : 'Could not load saved pitch. Reload the page to try again.';
+    } else if (!state.savedPitchReady) {
+      label = 'Loading…';
+      title = 'Loading saved pitch for this video';
+    } else if (matches) {
+      label = 'Saved ✓';
+      title = `${formatPitch(state.savedPitch)} is saved for this video. Adjust the pitch to save a new value.`;
+    } else if (canRestore) {
+      label = `Use ${formatPitch(state.savedPitch)}`;
+      title = `Apply the saved pitch of ${formatPitch(state.savedPitch)} for this video`;
+    } else if (hasSavedPitch) {
+      title += ` (replaces ${formatPitch(state.savedPitch)})`;
+    }
+    if (button.textContent !== label) button.textContent = label;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError);
+    button.classList.toggle('kp-saved', hasSavedPitch && !state.saveError);
   }
 
   function step(delta) {
-    state.semitones = clamp(state.semitones + delta, MIN_SEMITONES, MAX_SEMITONES);
-    applyPitch();
-    updateUI();
-    saveSettings();
-    resumeContext();
+    setSemitones(state.semitones + delta);
   }
 
-  function setSemitones(value) {
+  function setSemitones(value, restoreSavedPitch = false) {
+    state.restoreSavedPitch = restoreSavedPitch;
+    if (state.savedPitchReady) state.saveError = false;
     state.semitones = clamp(Math.round(Number(value) || 0), MIN_SEMITONES, MAX_SEMITONES);
     applyPitch();
     updateUI();
@@ -318,12 +431,16 @@
     reset.className = 'kp-btn kp-btn-small';
     reset.textContent = 'Reset';
 
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.className = 'kp-btn kp-btn-small kp-save';
+
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.className = 'kp-btn kp-btn-small';
     toggle.setAttribute('aria-label', 'Toggle pitch shift on or off');
 
-    row2.append(valueEl, reset, toggle);
+    row2.append(valueEl, save, reset, toggle);
 
     body.append(row, row2);
     panel.append(handle, body);
@@ -333,11 +450,13 @@
     state.slider = slider;
     state.valueEl = valueEl;
     state.toggleBtn = toggle;
+    state.saveBtn = save;
 
     slider.addEventListener('input', () => setSemitones(slider.value));
     minus.addEventListener('click', () => step(-1));
     plus.addEventListener('click', () => step(1));
-    reset.addEventListener('click', () => setSemitones(0));
+    save.addEventListener('click', saveOrRestorePitch);
+    reset.addEventListener('click', () => setSemitones(0, true));
     toggle.addEventListener('click', () => {
       state.enabled = !state.enabled;
       applyPitch();

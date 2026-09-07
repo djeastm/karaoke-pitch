@@ -21,6 +21,12 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   `MediaElementAudioSourceNode` does not apply them itself.
 - The floating panel is draggable (mouse and touch) and its setting is saved
   with `browser.storage.local`.
+- Click **Save** (left of Reset) to remember the current pitch for that video
+  on this device. When you return, the highlighted **Use −2 st** button (for
+  example) restores your saved pitch only when clicked. **Saved ✓** means the
+  current pitch already matches. Adjust the slider or use **− / +**, then click
+  **Save** to replace the saved value. **Reset** returns to zero without deleting
+  the saved pitch, so you can click the button to restore it again.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
   to show or hide it — handy for turning it off when you're not watching a
   karaoke video. The toolbar button is a master switch: hiding the panel also
@@ -59,6 +65,10 @@ same. Then verify:
   about `createMediaElementSource`).
 - YouTube's volume slider and mute button still affect the sound.
 - The setting persists after reloading the page.
+- Save different pitches for two videos, navigate between them without a full
+  reload, and verify each offers its own saved value without applying it
+  automatically. Check that Reset preserves it and manual adjustments can be
+  saved as a replacement. A saved pitch of zero should work too.
 
 ## Test on Firefox for Android
 
