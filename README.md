@@ -1,10 +1,10 @@
 # Karaoke Pitch
 
-A Firefox extension that lets you shift a YouTube video's pitch up or down
+A browser extension that lets you shift a YouTube video's pitch up or down
 (±12 semitones, one full octave) **without changing the tempo**, so you can
 sing along to karaoke videos in a key that suits your voice.
 
-Works on desktop Firefox and Firefox for Android.
+Works on desktop Firefox, Firefox for Android, and Chrome.
 
 ## How it works
 
@@ -20,7 +20,7 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
 - The `GainNode` mirrors YouTube's own volume/mute controls, because
   `MediaElementAudioSourceNode` does not apply them itself.
 - The floating panel is draggable (mouse and touch) and its setting is saved
-  with `browser.storage.local`.
+  with `storage.local`.
 - Click **Save** (left of Reset) to remember the current pitch for that video
   on this device. When you return, the highlighted **Use −2 st** button (for
   example) restores your saved pitch only when clicked. **Saved ✓** means the
@@ -37,20 +37,40 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
 ## Requirements
 
 - Node.js ≥ 18
-- Firefox desktop ≥ 120, or Firefox for Android ≥ 120
+- Firefox desktop ≥ 120, Firefox for Android ≥ 120, or Chrome ≥ 116
 
 ## Build
 
 ```sh
 npm install
-npm run build
+npm run build           # both targets
+npm run build:firefox   # dist/firefox only
+npm run build:chrome    # dist/chrome only
 ```
 
-This produces a `dist/` folder containing the packaged extension
-(`manifest.json`, bundled `content.js`, `panel.css`, and the web-accessible
-`soundtouch-processor.js`).
+Each target gets its own folder — `dist/firefox/` and `dist/chrome/` —
+containing `manifest.json`, the bundled `content.js` and `background.js`,
+`panel.css`, icons, and the web-accessible `soundtouch-processor.js`.
 
-## Test on desktop
+All of `src/` is shared. The two targets diverge in exactly two places, both
+handled by `build.js`:
+
+- **Manifest.** `src/manifest.json` is the Firefox manifest and is shipped
+  verbatim. The Chrome one is derived from it, so the version and description
+  can't drift: the gecko-only keys and `action.default_area` are dropped,
+  `background.scripts` becomes `background.service_worker`, the icons are
+  repointed at PNGs, and `minimum_chrome_version` is added.
+- **Icons.** Chrome supports SVG in neither the manifest nor `action.setIcon()`,
+  so the build rasterizes `src/icons/*.svg` to PNGs at 16/32/48/128 with
+  `sharp`. Firefox keeps using the SVGs. `background.js` receives the right icon
+  paths through an esbuild `define`.
+
+Both targets share one API shim — `globalThis.browser ?? globalThis.chrome` —
+rather than a polyfill, since every API used here (`storage.local`, `runtime`,
+`tabs`, `action`) has been promise-based in Chrome since version 88. `browser`
+is checked first because Firefox also defines a callback-style `chrome` alias.
+
+## Test on Firefox desktop
 
 ```sh
 npm run run
@@ -69,6 +89,23 @@ same. Then verify:
   reload, and verify each offers its own saved value without applying it
   automatically. Check that Reset preserves it and manual adjustments can be
   saved as a replacement. A saved pitch of zero should work too.
+
+## Test on Chrome
+
+```sh
+npm run build:chrome
+```
+
+Then open `chrome://extensions`, enable **Developer mode**, click **Load
+unpacked**, and select `dist/chrome/`. Pin the toolbar button, then run through
+the same checks as the Firefox list above. Two things worth confirming
+specifically on Chrome:
+
+- The pitch effect works at all. Chrome resolves the AudioWorklet through
+  `chrome.runtime.getURL()`; if the extension API were unavailable the worklet
+  would fail to load and the audio would play unshifted.
+- The toolbar icon and `ON` badge are still correct after Chrome has idled the
+  service worker (it restarts on demand and re-derives that state).
 
 ## Test on Firefox for Android
 
@@ -105,7 +142,29 @@ Release Firefox for Android only installs add-ons listed on
 
    The listing metadata (summary, category, license) comes from
    `amo-metadata.json`. `web-ext sign` uploads the package to AMO; you can also
-   upload the `dist/` ZIP manually at <https://addons.mozilla.org/developers/>.
+   upload the `dist/firefox/` ZIP manually at <https://addons.mozilla.org/developers/>.
+
+## Publish to the Chrome Web Store
+
+```sh
+npm run build:chrome
+npm run package:chrome
+```
+
+This writes `web-ext-artifacts/karaoke_pitch-<version>-chrome.zip` with
+`manifest.json` at the archive root, ready to upload at the
+[Developer Dashboard](https://chrome.google.com/webstore/devconsole). Unlike
+AMO, this step is manual and needs a one-time $5 developer registration fee.
+
+The listing also asks for justifications, which are worth having ready:
+
+- **Single purpose:** shifts the pitch of YouTube audio for singing along.
+- **`storage` permission:** remembers the chosen pitch and the panel's
+  visibility, per video, on the local device.
+- **`youtube.com` host access:** the extension only functions on YouTube watch,
+  Shorts, embed, and live pages, where the `<video>` element it processes lives.
+- **Data use:** nothing is collected or transmitted; all state stays in
+  `storage.local`.
 
 ## Limitations
 

@@ -35,7 +35,15 @@ class Element {
   }
 }
 
-async function setup(stored = {}, overrides = {}) {
+// Accessing any property of a decoy fails the test, so binding one to `chrome`
+// proves the content script never reaches for it when `browser` is present.
+const decoy = new Proxy({}, {
+  get(_target, prop) {
+    throw new Error(`unexpected use of the decoy extension API (read "${String(prop)}")`);
+  },
+});
+
+async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoys = [] } = {}) {
   const elements = [];
   const document = new Element('document');
   document.body = new Element('body');
@@ -59,12 +67,15 @@ async function setup(stored = {}, overrides = {}) {
     async set(values) { Object.assign(stored, values); },
     ...overrides,
   };
-  vm.runInNewContext(contentScript, {
+  const api = { storage: { local: storage }, runtime: { onMessage: { addListener() {} } } };
+  const sandbox = {
     window, document, URL, console,
-    browser: { storage: { local: storage }, runtime: { onMessage: { addListener() {} } } },
     MutationObserver: class { observe() {} },
     requestAnimationFrame: (callback) => callback(),
-  });
+  };
+  for (const name of decoys) sandbox[name] = decoy;
+  for (const name of globals) sandbox[name] = api;
+  vm.runInNewContext(contentScript, sandbox);
   await flush();
   const save = elements.find((element) => element.className?.includes('kp-save'));
   const slider = elements.find((element) => element.tag === 'input');
@@ -183,4 +194,24 @@ test('a save completing after navigation stays associated with its original vide
   await flush();
   assert.equal(stored[`savedPitch:${VIDEO_A}`], -5);
   assert.equal(app.save.textContent, 'Use +7 st');
+});
+
+test('the extension API resolves on Chrome, which defines only `chrome`', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_A}`]: -5 }, {}, { globals: ['chrome'] });
+  // Reading the saved pitch at all proves storage was reachable; before the
+  // shim, `browser` was undefined here and the API silently resolved to null.
+  assert.equal(app.save.textContent, 'Use -5 st');
+  app.edit(7);
+  app.save.emit('click');
+  await flush();
+  assert.equal(app.stored[`savedPitch:${VIDEO_A}`], 7);
+});
+
+test('`browser` wins on Firefox, which defines a callback-style `chrome` too', async () => {
+  const app = await setup(
+    { [`savedPitch:${VIDEO_A}`]: 3 },
+    {},
+    { globals: ['browser'], decoys: ['chrome'] }
+  );
+  assert.equal(app.save.textContent, 'Use +3 st');
 });

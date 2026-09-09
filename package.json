@@ -1,23 +1,28 @@
 {
   "name": "karaoke-pitch",
   "version": "0.3.0",
-  "description": "Firefox extension that shifts a YouTube video's pitch up or down (tempo preserved) to make karaoke songs easier to sing.",
+  "description": "Browser extension (Firefox and Chrome) that shifts a YouTube video's pitch up or down (tempo preserved) to make karaoke songs easier to sing.",
   "private": true,
   "license": "MPL-2.0",
   "scripts": {
     "test": "node --test",
     "build": "node build.js",
-    "lint": "web-ext lint --source-dir dist",
-    "run": "web-ext run --source-dir dist",
-    "run:android": "web-ext run --source-dir dist --target firefox-android --android-device R5CR30CHXRE --firefox-apk org.mozilla.fenix",
-    "sign": "web-ext sign --source-dir dist --channel=listed --amo-metadata amo-metadata.json",
-    "sign:unlisted": "web-ext sign --source-dir dist --channel=unlisted"
+    "build:firefox": "node build.js firefox",
+    "build:chrome": "node build.js chrome",
+    "lint": "web-ext lint --source-dir dist/firefox",
+    "run": "web-ext run --source-dir dist/firefox",
+    "run:android": "web-ext run --source-dir dist/firefox --target firefox-android --android-device R5CR30CHXRE --firefox-apk org.mozilla.fenix",
+    "sign": "web-ext sign --source-dir dist/firefox --channel=listed --amo-metadata amo-metadata.json",
+    "sign:unlisted": "web-ext sign --source-dir dist/firefox --channel=unlisted",
+    "package:chrome": "node package-chrome.js"
   },
   "dependencies": {
     "@soundtouchjs/audio-worklet": "^2.1.1"
   },
   "devDependencies": {
+    "adm-zip": "^0.6.0",
     "esbuild": "^0.25.0",
+    "sharp": "^0.35.4",
     "web-ext": "^8.0.0"
   }
 }

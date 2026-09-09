@@ -10,7 +10,10 @@
   // Processor name registered by dist/soundtouch-processor.js.
   const PROCESSOR_NAME = 'soundtouch-processor';
 
-  const browserAPI = typeof browser !== 'undefined' ? browser : null;
+  // Firefox exposes `browser` (promise-based); Chrome exposes `chrome`. Firefox
+  // also defines a callback-style `chrome` alias, so `browser` must win. Every
+  // API used here (storage.local, runtime, onMessage) returns promises in both.
+  const browserAPI = globalThis.browser ?? globalThis.chrome ?? null;
 
   // createMediaElementSource() may only be called once per element.
   const attachedElements = new WeakSet();
