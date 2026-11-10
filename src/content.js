@@ -42,6 +42,10 @@
     videoId: null,
     savedPitch: null,
     savedMeta: null,
+    // The last title seen for a video, and the one shown by the video we just
+    // left (which can linger on screen after in-page navigation).
+    seenTitle: null,
+    leftTitle: '',
     savedPitchReady: false,
     restoreSavedPitch: true,
     savingPitch: false,
@@ -61,6 +65,7 @@
   const drawer = {
     open: false,
     songs: null,
+    untitled: 0,
     request: 0,
     el: null,
     button: null,
@@ -119,14 +124,40 @@
     }
   }
 
-  // Saves from 0.3.0 have a pitch but no title. Fill it in the next time the
-  // user applies one, so the Saved songs page can name it.
-  function backfillSavedTitle() {
+  // Stricter than currentVideoTitle(), since no one is clicking Save to vouch
+  // for it: on watch pages wait for the heading YouTube has tied to this video
+  // (a hidden watch page can outlive a visit to Shorts, so only look there on
+  // /watch), and never take the previous video's title.
+  function observedVideoTitle(videoId) {
+    let title;
+    if (new URL(window.location.href).pathname === '/watch') {
+      const page = document.querySelector('ytd-watch-flexy[video-id]');
+      title = page && page.getAttribute('video-id') === videoId
+        ? collapseSpace(document.querySelector('ytd-watch-metadata h1')?.textContent)
+        : '';
+    } else {
+      title = cleanDocumentTitle(document.title);
+    }
+    return title && title !== state.leftTitle ? title : '';
+  }
+
+  // Called on every page change. Saves from 0.3.0 have a pitch but no title,
+  // and stay out of the saved songs lists until they get one, so fill it in
+  // as soon as the video is opened again.
+  function observeTitle() {
+    const videoId = state.videoId;
+    if (!videoId || videoId !== currentVideoId()) return;
+    const title = observedVideoTitle(videoId);
+    if (!title) return;
+    state.seenTitle = { id: videoId, title };
+    backfillSavedTitle(title);
+  }
+
+  function backfillSavedTitle(title) {
     const videoId = state.videoId;
     const meta = state.savedMeta || {};
-    if (!videoId || meta.title) return;
-    const title = currentVideoTitle(videoId);
-    if (!title) return;
+    if (!state.savedPitchReady || state.savedPitch === null || state.savingPitch || meta.title) return;
+    // No savedAt: when the pitch was saved was never recorded.
     const next = { ...meta, title };
     state.savedMeta = next;
     try {
@@ -140,6 +171,7 @@
     const videoId = currentVideoId();
     if (videoId === state.videoId) return;
     const request = ++savedPitchRequest;
+    state.leftTitle = state.videoId && state.seenTitle?.id === state.videoId ? state.seenTitle.title : '';
     state.videoId = videoId;
     state.savedPitch = null;
     state.savedMeta = null;
@@ -168,6 +200,8 @@
       state.saveError = true;
     }
     updateSaveButton();
+    // The title may already be on screen, with no further page changes coming.
+    observeTitle();
   }
 
   async function saveOrRestorePitch() {
@@ -179,7 +213,6 @@
     if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
     if (state.restoreSavedPitch && state.savedPitch !== null) {
       setSemitones(state.savedPitch);
-      backfillSavedTitle();
       return;
     }
 
@@ -374,6 +407,7 @@
 
   function checkVideo() {
     syncSavedPitch();
+    observeTitle();
     const current = findVideo();
     if (current === state.video) return;
     if (state.video && !state.video.isConnected) detachVideo();
@@ -679,27 +713,36 @@
     }
   }
 
+  const OLDER_SAVES_NOTE = 'Songs saved before version 0.4 appear here once you play them again.';
+
   function setDrawerStatus(text) {
     drawer.status.textContent = text;
     drawer.status.hidden = !text;
   }
 
   // Same rules as collectSongs() in saved.js: only entries the panel would
-  // accept as a saved pitch, newest first, undated (0.3.0) saves last.
+  // accept as a saved pitch, newest first, undated (0.3.0) saves last. Saves
+  // without a title are counted but not listed until they are opened again.
   function collectSavedSongs(items) {
     const songs = [];
+    let untitled = 0;
     for (const [key, pitch] of Object.entries(items || {})) {
       if (!key.startsWith('savedPitch:')) continue;
       const id = key.slice('savedPitch:'.length);
       if (!/^[\w-]{11}$/.test(id)) continue;
       if (!Number.isInteger(pitch) || pitch < MIN_SEMITONES || pitch > MAX_SEMITONES) continue;
       const meta = validMeta(items[savedPitchMetaKey(id)]) || {};
-      songs.push({ id, title: meta.title || '', savedAt: meta.savedAt ?? null });
+      if (!meta.title) {
+        untitled += 1;
+        continue;
+      }
+      songs.push({ id, title: meta.title, savedAt: meta.savedAt ?? null });
     }
-    return songs.sort((a, b) =>
+    songs.sort((a, b) =>
       (b.savedAt ?? -Infinity) - (a.savedAt ?? -Infinity)
-      || (a.title || '\uffff').localeCompare(b.title || '\uffff')
+      || a.title.localeCompare(b.title)
       || a.id.localeCompare(b.id));
+    return { songs, untitled };
   }
 
   async function loadDrawer() {
@@ -707,7 +750,7 @@
     try {
       const items = await browserAPI.storage.local.get(null);
       if (request !== drawer.request) return;
-      drawer.songs = collectSavedSongs(items);
+      ({ songs: drawer.songs, untitled: drawer.untitled } = collectSavedSongs(items));
     } catch (e) {
       if (request !== drawer.request) return;
       drawer.songs = null;
@@ -722,11 +765,13 @@
     if (!drawer.open || drawer.songs === null) return;
     const terms = (drawer.search.value || '').toLowerCase().split(/\s+/).filter(Boolean);
     const shown = drawer.songs.filter((song) => {
-      const title = (song.title || 'Untitled video').toLowerCase();
+      const title = song.title.toLowerCase();
       return terms.every((term) => title.includes(term));
     });
     drawer.list.replaceChildren(...shown.map(renderDrawerSong));
-    setDrawerStatus(!drawer.songs.length ? 'No saved songs yet.' : !shown.length ? 'No matches.' : '');
+    setDrawerStatus(!drawer.songs.length
+      ? drawer.untitled ? OLDER_SAVES_NOTE : 'No saved songs yet.'
+      : !shown.length ? 'No matches.' : '');
   }
 
   function renderDrawerSong(song) {
@@ -736,7 +781,7 @@
     link.className = current ? 'kp-drawer-song kp-current' : 'kp-drawer-song';
     // Relative, so m.youtube.com stays on m.youtube.com.
     link.href = `/watch?v=${song.id}`;
-    link.textContent = song.title || 'Untitled video';
+    link.textContent = song.title;
     link.title = link.textContent;
     if (current) link.setAttribute('aria-current', 'true');
     item.append(link);

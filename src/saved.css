@@ -154,10 +154,6 @@ h1 {
   text-decoration: underline;
 }
 
-.kp-untitled {
-  font-style: italic;
-}
-
 .kp-song-details {
   color: var(--muted);
   font-size: 13px;

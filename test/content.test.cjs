@@ -78,13 +78,14 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
     ...overrides,
   };
   const changeListeners = [];
+  const mutationCallbacks = [];
   const api = {
     storage: { local: storage, onChanged: { addListener: (listener) => changeListeners.push(listener) } },
     runtime: { onMessage: { addListener() {} } },
   };
   const sandbox = {
     window, document, URL, console,
-    MutationObserver: class { observe() {} },
+    MutationObserver: class { constructor(callback) { mutationCallbacks.push(callback); } observe() {} },
     requestAnimationFrame: (callback) => callback(),
   };
   for (const name of decoys) sandbox[name] = decoy;
@@ -101,6 +102,8 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
     drawerStatus: elements.find((element) => element.className === 'kp-drawer-status'),
     drawerSongs: () => elements.find((element) => element.className === 'kp-drawer-list')
       .children.map((item) => item.children[0]),
+    // Stands in for YouTube changing the DOM (e.g. the heading arriving).
+    async mutate() { for (const callback of mutationCallbacks) callback([]); await flush(); },
     async openDrawer() { this.songs.emit('click'); await flush(); },
     async storageChanged(changes, area = 'local') {
       for (const listener of changeListeners) listener(changes, area);
@@ -278,17 +281,59 @@ test('a heading from the previous video is ignored in favour of the tab title', 
   assert.equal(untitled.stored[`savedPitchMeta:${VIDEO_A}`].title, '');
 });
 
-test('applying a 0.3.0 save fills in its missing title', async () => {
+test('opening a 0.3.0 save fills in its title without any click', async () => {
   const app = await setup({ [`savedPitch:${VIDEO_A}`]: 4 }, {}, {
     page: { videoId: VIDEO_A, heading: 'Old favourite' },
   });
+  // The saved pitch is still only offered, not applied.
   assert.equal(app.save.textContent, 'Use +4 st');
-  app.save.emit('click');
-  await flush();
-  assert.equal(app.slider.value, '4');
+  assert.equal(app.slider.value, '0');
   assert.equal(app.stored[`savedPitch:${VIDEO_A}`], 4);
   // No date is invented for a save whose time was never recorded.
   assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
+});
+
+test('the title is filled in once the heading for this video arrives', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_A}`]: -1 }, {}, {
+    page: { title: 'Old favourite - YouTube' },
+  });
+  // On a watch page, the tab title alone is not trusted for this.
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`], undefined);
+  app.page.videoId = VIDEO_A;
+  app.page.heading = 'Old favourite';
+  await app.mutate();
+  assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
+});
+
+test('navigating to a 0.3.0 save never gives it the previous video’s title', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_B}`]: 2 }, {}, {
+    page: { videoId: VIDEO_A, heading: 'First song', title: 'First song - YouTube' },
+  });
+  await app.navigate(`/watch?v=${VIDEO_B}`);
+  await app.mutate();
+  // The watch page has switched to B, but the heading has not caught up yet.
+  app.page.videoId = VIDEO_B;
+  await app.mutate();
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_B}`], undefined);
+  app.page.heading = 'Second song';
+  await app.mutate();
+  assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_B}`] }, { title: 'Second song' });
+});
+
+test('Shorts use the tab title even with a hidden watch page left behind', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_B}`]: 2 }, {}, {
+    page: { videoId: VIDEO_A, heading: 'First song', title: 'First song - YouTube' },
+  });
+  await app.navigate(`/shorts/${VIDEO_B}`);
+  app.page.title = 'A short one #shorts - YouTube';
+  await app.mutate();
+  assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_B}`] }, { title: 'A short one #shorts' });
+});
+
+test('videos without a saved pitch get no title entry', async () => {
+  const app = await setup({}, {}, { page: { videoId: VIDEO_A, heading: 'Never saved' } });
+  await app.mutate();
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`], undefined);
 });
 
 test('applying a save that already has a title leaves it alone', async () => {
@@ -322,7 +367,8 @@ test('☰ toggles a drawer of saved song titles inside the panel, newest first',
   await app.openDrawer();
   assert.equal(app.drawer.hidden, false);
   assert.equal(app.songs.attributes['aria-expanded'], 'true');
-  assert.deepEqual(titlesOf(app), ['Sunset Boulevard Medley', 'Waterloo Sunset', 'Untitled video']);
+  // The 0.3.0 save without a title (VIDEO_C) is not listed.
+  assert.deepEqual(titlesOf(app), ['Sunset Boulevard Medley', 'Waterloo Sunset']);
   // Titles only: no pitch or date, and links stay on the current tab and host.
   const [first, current] = app.drawerSongs();
   assert.equal(first.href, `/watch?v=${VIDEO_B}`);
@@ -350,7 +396,7 @@ test('the drawer searches titles only, every word, ignoring case', async () => {
   assert.equal(app.drawerStatus.textContent, 'No matches.');
   assert.equal(app.drawerStatus.hidden, false);
   search('');
-  assert.equal(titlesOf(app).length, 3);
+  assert.equal(titlesOf(app).length, 2);
 });
 
 test('typing in the drawer stays out of YouTube’s shortcuts and Escape closes it', async () => {
@@ -391,6 +437,13 @@ test('opening the drawer expands a minimized panel', async () => {
   await app.openDrawer();
   assert.equal(panel.classes.has('kp-collapsed'), false);
   assert.equal(minimize.attributes['aria-label'], 'Minimize panel');
+});
+
+test('a drawer with only untitled 0.3.0 saves explains where they went', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_B}`]: 1, [`savedPitch:${VIDEO_C}`]: -1 });
+  await app.openDrawer();
+  assert.deepEqual(titlesOf(app), []);
+  assert.equal(app.drawerStatus.textContent, 'Songs saved before version 0.4 appear here once you play them again.');
 });
 
 test('the drawer reports a storage failure', async () => {
