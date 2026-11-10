@@ -161,7 +161,6 @@
     // No savedAt: when the pitch was saved was never recorded.
     const next = { ...meta, title };
     state.savedMeta = next;
-    updateSaveButton();
     try {
       browserAPI.storage.local.set({ [savedPitchMetaKey(videoId)]: next }).catch(() => {});
     } catch (e) {
@@ -213,9 +212,7 @@
       return;
     }
     if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
-    // When the pitch already matches, a click re-saves it (with this video's
-    // title) rather than restoring a value that is already applied.
-    if (state.restoreSavedPitch && state.savedPitch !== null && state.savedPitch !== state.semitones) {
+    if (state.restoreSavedPitch && state.savedPitch !== null) {
       setSemitones(state.savedPitch);
       return;
     }
@@ -412,8 +409,6 @@
   function checkVideo() {
     syncSavedPitch();
     observeTitle();
-    // Whether Save can add a title depends on what the page shows right now.
-    updateSaveButton();
     const current = findVideo();
     if (current === state.video) return;
     if (state.video && !state.video.isConnected) detachVideo();
@@ -464,10 +459,6 @@
     const hasSavedPitch = state.savedPitch !== null;
     const matches = hasSavedPitch && state.savedPitch === state.semitones;
     const canRestore = hasSavedPitch && state.restoreSavedPitch && !matches;
-    // A save without a title (e.g. from 0.3.0) can be re-saved as it is, to
-    // record the title shown on the page, rather than being "Saved ✓".
-    const canAddTitle = matches && state.savedPitchReady && !state.savedMeta?.title
-      && Boolean(currentVideoTitle(state.videoId));
     let label = 'Save';
     let title = `Save ${formatPitch(state.semitones)} for this video`;
     if (!state.videoId) {
@@ -481,8 +472,6 @@
     } else if (!state.savedPitchReady) {
       label = 'Loading…';
       title = 'Loading saved pitch for this video';
-    } else if (canAddTitle) {
-      title = `Save this video's title with its saved pitch of ${formatPitch(state.savedPitch)}`;
     } else if (matches) {
       label = 'Saved ✓';
       title = `${formatPitch(state.savedPitch)} is saved for this video. Adjust the pitch to save a new value.`;
@@ -495,7 +484,7 @@
     if (button.textContent !== label) button.textContent = label;
     button.title = title;
     button.setAttribute('aria-label', title);
-    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError && !canAddTitle);
+    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError);
     button.classList.toggle('kp-saved', hasSavedPitch && !state.saveError);
   }
 

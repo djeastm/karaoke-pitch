@@ -293,37 +293,6 @@ test('opening a 0.3.0 save fills in its title without any click', async () => {
   assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
 });
 
-test('Save stays clickable when the pitch matches a save that has no title', async () => {
-  // The tab title is enough for Save, though not for the automatic fill-in.
-  const app = await setup({ semitones: -3, [`savedPitch:${VIDEO_A}`]: -3 }, {}, {
-    page: { title: 'Untitled until now - YouTube' },
-  });
-  assert.equal(app.slider.value, '-3');
-  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`], undefined);
-  assert.equal(app.save.textContent, 'Save');
-  assert.equal(app.save.disabled, false);
-  assert.match(app.save.title, /title with its saved pitch of -3 st/);
-
-  app.save.emit('click');
-  await flush();
-  assert.equal(app.slider.value, '-3');
-  assert.equal(app.stored[`savedPitch:${VIDEO_A}`], -3);
-  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`].title, 'Untitled until now');
-  assert.equal(app.save.textContent, 'Saved ✓');
-  assert.equal(app.save.disabled, true);
-});
-
-test('with no title to offer, a matching untitled save is just Saved ✓', async () => {
-  const app = await setup({ semitones: 2, [`savedPitch:${VIDEO_A}`]: 2 }, {}, { page: { title: 'YouTube' } });
-  assert.equal(app.save.textContent, 'Saved ✓');
-  assert.equal(app.save.disabled, true);
-  // Once the page shows one, Save becomes available.
-  app.page.title = 'Late title - YouTube';
-  await app.mutate();
-  assert.equal(app.save.textContent, 'Save');
-  assert.equal(app.save.disabled, false);
-});
-
 test('the title is filled in once the heading for this video arrives', async () => {
   const app = await setup({ [`savedPitch:${VIDEO_A}`]: -1 }, {}, {
     page: { title: 'Old favourite - YouTube' },
@@ -346,14 +315,15 @@ test('navigating to a 0.3.0 save never gives it the previous video’s title', a
   app.page.videoId = VIDEO_B;
   await app.mutate();
   assert.equal(app.stored[`savedPitchMeta:${VIDEO_B}`], undefined);
-  // Save does not offer the lingering title either.
+  // Nor does a Save made in that moment.
+  app.edit(3);
   app.save.emit('click');
-  app.edit(2);
-  assert.equal(app.save.textContent, 'Saved ✓');
-  assert.equal(app.save.disabled, true);
+  await flush();
+  assert.equal(app.stored[`savedPitch:${VIDEO_B}`], 3);
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_B}`].title, '');
   app.page.heading = 'Second song';
   await app.mutate();
-  assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_B}`] }, { title: 'Second song' });
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_B}`].title, 'Second song');
 });
 
 test('Shorts use the tab title even with a hidden watch page left behind', async () => {
