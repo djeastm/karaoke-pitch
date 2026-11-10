@@ -69,15 +69,6 @@
     }
   });
 
-  // The panel's ☰ button asks for the Saved songs page, which is registered as
-  // the options page; content scripts cannot open it themselves.
-  browserAPI.runtime.onMessage.addListener((msg) => {
-    if (msg && msg.type === 'openSavedSongs') {
-      browserAPI.runtime.openOptionsPage().catch(() => {});
-    }
-    // Return nothing: no reply is sent, so Chrome need not hold the channel open.
-  });
-
   // Chrome tears the service worker down when idle, losing the icon/badge state
   // it set. Re-derive it whenever the worker starts up again.
   if (browserAPI.runtime.onStartup) {

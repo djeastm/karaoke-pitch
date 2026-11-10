@@ -27,11 +27,12 @@ class Element {
   }
   append(...children) { this.children.push(...children); }
   appendChild(child) { this.append(child); }
+  replaceChildren(...children) { this.children = children; }
   setAttribute(name, value) { this.attributes[name] = value; }
   addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
-  emit(name) {
+  emit(name, event = {}) {
     if (name === 'click' && this.disabled) return;
-    for (const listener of this.listeners[name] || []) listener({ target: this });
+    for (const listener of this.listeners[name] || []) listener({ type: name, target: this, ...event });
   }
 }
 
@@ -76,13 +77,10 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
     async set(values) { Object.assign(stored, values); },
     ...overrides,
   };
-  const messages = [];
+  const changeListeners = [];
   const api = {
-    storage: { local: storage },
-    runtime: {
-      onMessage: { addListener() {} },
-      async sendMessage(message) { messages.push(message); },
-    },
+    storage: { local: storage, onChanged: { addListener: (listener) => changeListeners.push(listener) } },
+    runtime: { onMessage: { addListener() {} } },
   };
   const sandbox = {
     window, document, URL, console,
@@ -96,8 +94,18 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
   const save = elements.find((element) => element.className?.includes('kp-save'));
   const slider = elements.find((element) => element.tag === 'input');
   return {
-    save, slider, stored, storage, elements, messages, page,
+    save, slider, stored, storage, elements, page,
     songs: elements.find((element) => element.className?.includes('kp-songs')),
+    drawer: elements.find((element) => element.className === 'kp-drawer'),
+    drawerSearch: elements.find((element) => element.className === 'kp-drawer-search'),
+    drawerStatus: elements.find((element) => element.className === 'kp-drawer-status'),
+    drawerSongs: () => elements.find((element) => element.className === 'kp-drawer-list')
+      .children.map((item) => item.children[0]),
+    async openDrawer() { this.songs.emit('click'); await flush(); },
+    async storageChanged(changes, area = 'local') {
+      for (const listener of changeListeners) listener(changes, area);
+      await flush();
+    },
     reset: elements.find((element) => element.textContent === 'Reset'),
     edit(value) { slider.value = String(value); slider.emit('input'); },
     async navigate(path, event = 'yt-navigate-finish') {
@@ -294,11 +302,104 @@ test('applying a save that already has a title leaves it alone', async () => {
   assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`], meta);
 });
 
-test('the ☰ button asks the background script to open Saved songs', async () => {
-  const app = await setup();
-  assert.equal(app.songs.textContent, '\u2630');
-  assert.equal(app.songs.attributes['aria-label'], 'Saved songs');
+const VIDEO_C = 'wxyzwxyzwxy';
+const library = () => ({
+  [`savedPitch:${VIDEO_A}`]: -2,
+  [`savedPitchMeta:${VIDEO_A}`]: { title: 'Waterloo Sunset', savedAt: 1000 },
+  [`savedPitch:${VIDEO_B}`]: 3,
+  [`savedPitchMeta:${VIDEO_B}`]: { title: 'Sunset Boulevard Medley', savedAt: 3000 },
+  [`savedPitch:${VIDEO_C}`]: 0,
+  'savedPitch:not-an-id': 1,
+  [`savedPitchMeta:${VIDEO_C}`]: 'malformed',
+});
+const titlesOf = (app) => app.drawerSongs().map((link) => link.textContent);
+
+test('☰ toggles a drawer of saved song titles inside the panel, newest first', async () => {
+  const app = await setup(library());
+  assert.equal(app.drawer.hidden, true);
+  assert.equal(app.songs.attributes['aria-expanded'], 'false');
+
+  await app.openDrawer();
+  assert.equal(app.drawer.hidden, false);
+  assert.equal(app.songs.attributes['aria-expanded'], 'true');
+  assert.deepEqual(titlesOf(app), ['Sunset Boulevard Medley', 'Waterloo Sunset', 'Untitled video']);
+  // Titles only: no pitch or date, and links stay on the current tab and host.
+  const [first, current] = app.drawerSongs();
+  assert.equal(first.href, `/watch?v=${VIDEO_B}`);
+  assert.equal(first.target, undefined);
+  assert.equal(current.className, 'kp-drawer-song kp-current');
+  assert.equal(current.attributes['aria-current'], 'true');
+  assert.equal(app.drawerStatus.hidden, true);
+
   app.songs.emit('click');
+  assert.equal(app.drawer.hidden, true);
+});
+
+test('the drawer searches titles only, every word, ignoring case', async () => {
+  const app = await setup(library());
+  await app.openDrawer();
+  const search = (value) => { app.drawerSearch.value = value; app.drawerSearch.emit('input'); };
+
+  search('SUNSET');
+  assert.deepEqual(titlesOf(app), ['Sunset Boulevard Medley', 'Waterloo Sunset']);
+  search(' sunset   water ');
+  assert.deepEqual(titlesOf(app), ['Waterloo Sunset']);
+  // Video IDs are not searched.
+  search(VIDEO_B);
+  assert.deepEqual(titlesOf(app), []);
+  assert.equal(app.drawerStatus.textContent, 'No matches.');
+  assert.equal(app.drawerStatus.hidden, false);
+  search('');
+  assert.equal(titlesOf(app).length, 3);
+});
+
+test('typing in the drawer stays out of YouTube’s shortcuts and Escape closes it', async () => {
+  const app = await setup(library());
+  await app.openDrawer();
+  let stopped = 0;
+  for (const type of ['keydown', 'keypress', 'keyup']) {
+    app.drawerSearch.emit(type, { key: 'k', stopPropagation: () => { stopped += 1; } });
+  }
+  assert.equal(stopped, 3);
+  assert.equal(app.drawer.hidden, false);
+  app.drawerSearch.emit('keydown', { key: 'Escape', stopPropagation() {} });
+  assert.equal(app.drawer.hidden, true);
+});
+
+test('the drawer refreshes on saves while open and marks the video after navigation', async () => {
+  const app = await setup({});
+  await app.openDrawer();
+  assert.equal(app.drawerStatus.textContent, 'No saved songs yet.');
+
+  app.page.title = 'Fresh Song - YouTube';
+  app.save.emit('click');
   await flush();
-  assert.deepEqual(app.messages.map((message) => ({ ...message })), [{ type: 'openSavedSongs' }]);
+  await app.storageChanged({ [`savedPitch:${VIDEO_A}`]: { newValue: 0 } });
+  assert.deepEqual(titlesOf(app), ['Fresh Song']);
+  assert.equal(app.drawerStatus.hidden, true);
+
+  await app.navigate(`/watch?v=${VIDEO_B}`);
+  assert.equal(app.drawerSongs()[0].className, 'kp-drawer-song');
+});
+
+test('opening the drawer expands a minimized panel', async () => {
+  const app = await setup(library());
+  const panel = app.elements.find((element) => element.id === 'kp-panel');
+  const minimize = app.elements.find((element) => element.attributes['aria-label'] === 'Minimize panel');
+  minimize.emit('click');
+  assert.equal(panel.classes.has('kp-collapsed'), true);
+  await app.openDrawer();
+  assert.equal(panel.classes.has('kp-collapsed'), false);
+  assert.equal(minimize.attributes['aria-label'], 'Minimize panel');
+});
+
+test('the drawer reports a storage failure', async () => {
+  const app = await setup({}, {
+    async get(key) {
+      if (key === null) throw new Error('Storage unavailable');
+      return typeof key === 'string' ? {} : key;
+    },
+  });
+  await app.openDrawer();
+  assert.equal(app.drawerStatus.textContent, 'Could not load saved songs.');
 });

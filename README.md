@@ -27,16 +27,20 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   current pitch already matches. Adjust the slider or use **− / +**, then click
   **Save** to replace the saved value. **Reset** returns to zero without deleting
   the saved pitch, so you can click the button to restore it again.
-- Click **☰** in the panel's title bar (or the extension's **Options** entry in
-  the browser's add-ons/extensions page) to open **Saved songs**: every video
-  you have saved a pitch for, newest first, with its title and pitch. Type in
-  the search box to filter by title or video ID; every word must match, and
-  case is ignored. Click a song to open it on YouTube in the same tab, where
-  the panel offers **Use ±N st**; tick **Open songs in a new tab** to keep the
-  list open instead (the choice is remembered). The list updates by itself
-  when you save from another tab.
-  Pitches saved with 0.3.0 have no title yet and show as *Untitled video* with
-  their ID until you next click **Use ±N st** on that video, which fills it in.
+- Click **☰** in the panel's title bar to open a drawer below the controls
+  listing the titles of every video you have saved a pitch for, newest first,
+  with the current video highlighted. Type in its search box to filter by title
+  (every word must match; case is ignored; **Esc** closes the drawer). Browsing
+  it doesn't interrupt the video that's playing; click a title when you're
+  ready to switch, and that video loads in the same tab, where the panel offers
+  **Use ±N st**. The drawer updates by itself when you save a song.
+- The extension's **Options** entry (in the browser's add-ons/extensions page)
+  opens the full **Saved songs** page: titles, pitches and save dates, searchable
+  by title or video ID. Songs open in the same tab; tick **Open songs in a new
+  tab** to keep the list open instead (the choice is remembered). The list
+  updates by itself when you save from another tab.
+- Pitches saved with 0.3.0 have no title yet and show as *Untitled video* until
+  you next click **Use ±N st** on that video, which fills it in.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
   to show or hide it — handy for turning it off when you're not watching a
   karaoke video. The toolbar button is a master switch: hiding the panel also
@@ -100,14 +104,19 @@ same. Then verify:
   reload, and verify each offers its own saved value without applying it
   automatically. Check that Reset preserves it and manual adjustments can be
   saved as a replacement. A saved pitch of zero should work too.
-- With two songs saved, click **☰** in the panel: the Saved songs page opens in
-  a new tab, listing both with their titles and pitches, newest first (it also
-  opens from the extension's **Options** entry). Search by part of a title and
-  by part of a video ID, and check a search with no results says so. Click a
-  song and confirm its watch page opens in the same tab and offers **Use ±N
-  st**. Go back, tick **Open songs in a new tab**, and confirm a click now opens
-  a new tab and the box stays ticked after reloading the page. Leave the page open,
-  save a third song in another tab, and confirm it appears without a reload.
+- With two songs saved and one playing, click **☰** in the panel: the drawer
+  lists both titles, newest first, with the current one highlighted, and the
+  video keeps playing. Search by part of a title, check a search with no
+  results says so, and check that typing (e.g. `k` or `f`) doesn't trigger
+  YouTube's shortcuts. Click the other title and confirm it loads in the same
+  tab and offers **Use ±N st**. With the drawer open, save a new pitch and
+  confirm the list updates.
+- Open the extension's **Options** entry: the Saved songs page lists both songs
+  with titles and pitches, newest first. Search by part of a title and by part
+  of a video ID. Click a song and confirm it opens in the same tab; go back,
+  tick **Open songs in a new tab**, and confirm a click now opens a new tab and
+  the box stays ticked after reloading the page. Leave the page open, save a
+  third song in another tab, and confirm it appears without a reload.
 
 ## Test on Chrome
 

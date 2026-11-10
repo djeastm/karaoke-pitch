@@ -37,6 +37,8 @@
     valueEl: null,
     toggleBtn: null,
     saveBtn: null,
+    collapseBtn: null,
+    collapsed: false,
     videoId: null,
     savedPitch: null,
     savedMeta: null,
@@ -53,6 +55,19 @@
   // 0.3.0) so the Saved songs page can show something more useful than an ID.
   const savedPitchMetaKey = (videoId) => `savedPitchMeta:${videoId}`;
   let savedPitchRequest = 0;
+
+  // The ☰ drawer: saved songs listed inside the panel, so the user can pick
+  // the next one without leaving (or pausing) the video that is playing.
+  const drawer = {
+    open: false,
+    songs: null,
+    request: 0,
+    el: null,
+    button: null,
+    search: null,
+    list: null,
+    status: null,
+  };
 
   /* ---------- persistence ---------- */
   function currentVideoId() {
@@ -133,6 +148,7 @@
     state.savingPitch = false;
     state.saveError = false;
     updateSaveButton();
+    renderDrawer();
     if (!videoId) return;
 
     try {
@@ -474,6 +490,7 @@
     songs.textContent = '☰';
     songs.title = 'Saved songs';
     songs.setAttribute('aria-label', 'Saved songs');
+    songs.setAttribute('aria-expanded', 'false');
     const actions = document.createElement('span');
     actions.className = 'kp-actions';
     actions.append(songs, collapse);
@@ -532,7 +549,8 @@
     row2.append(valueEl, save, reset, toggle);
 
     body.append(row, row2);
-    panel.append(handle, body);
+    const songDrawer = buildDrawer();
+    panel.append(handle, body, songDrawer);
     document.body.appendChild(panel);
 
     state.panel = panel;
@@ -540,12 +558,14 @@
     state.valueEl = valueEl;
     state.toggleBtn = toggle;
     state.saveBtn = save;
+    state.collapseBtn = collapse;
+    drawer.button = songs;
 
     slider.addEventListener('input', () => setSemitones(slider.value));
     minus.addEventListener('click', () => step(-1));
     plus.addEventListener('click', () => step(1));
     save.addEventListener('click', saveOrRestorePitch);
-    songs.addEventListener('click', openSavedSongs);
+    songs.addEventListener('click', () => setDrawerOpen(!drawer.open));
     reset.addEventListener('click', () => setSemitones(0, true));
     toggle.addEventListener('click', () => {
       state.enabled = !state.enabled;
@@ -554,10 +574,7 @@
       saveSettings();
       resumeContext();
     });
-    collapse.addEventListener('click', () => {
-      const collapsed = panel.classList.toggle('kp-collapsed');
-      collapse.setAttribute('aria-label', collapsed ? 'Expand panel' : 'Minimize panel');
-    });
+    collapse.addEventListener('click', () => setCollapsed(!state.collapsed));
 
     // Any interaction with the panel is a user gesture we can use to resume audio.
     panel.addEventListener('pointerdown', resumeContext, true);
@@ -603,14 +620,136 @@
     handle.addEventListener('pointercancel', endDrag);
   }
 
-  // Content scripts cannot call runtime.openOptionsPage(), so ask the
-  // background script to open the Saved songs page for us.
-  function openSavedSongs() {
-    try {
-      browserAPI.runtime.sendMessage({ type: 'openSavedSongs' }).catch(() => {});
-    } catch (e) {
-      /* extension context invalidated (e.g., after an update) */
+  function setCollapsed(value) {
+    state.collapsed = value;
+    state.panel.classList.toggle('kp-collapsed', value);
+    state.collapseBtn.setAttribute('aria-label', value ? 'Expand panel' : 'Minimize panel');
+  }
+
+  /* ---------- saved songs drawer ---------- */
+  function buildDrawer() {
+    const el = document.createElement('div');
+    el.className = 'kp-drawer';
+    el.hidden = true;
+
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'kp-drawer-search';
+    search.placeholder = 'Search saved songs';
+    search.setAttribute('aria-label', 'Search saved songs by title');
+    search.setAttribute('autocomplete', 'off');
+    search.setAttribute('spellcheck', 'false');
+
+    const status = document.createElement('p');
+    status.className = 'kp-drawer-status';
+    status.setAttribute('aria-live', 'polite');
+
+    const list = document.createElement('ul');
+    list.className = 'kp-drawer-list';
+    list.setAttribute('aria-label', 'Saved songs');
+
+    el.append(search, status, list);
+    Object.assign(drawer, { el, search, list, status });
+
+    search.addEventListener('input', renderDrawer);
+    // Keep typing out of YouTube's keyboard shortcuts (k, f, m, space…).
+    const isolate = (e) => {
+      if (e.stopPropagation) e.stopPropagation();
+      if (e.type === 'keydown' && e.key === 'Escape') {
+        setDrawerOpen(false);
+        if (drawer.button.focus) drawer.button.focus();
+      }
+    };
+    for (const type of ['keydown', 'keypress', 'keyup']) search.addEventListener(type, isolate);
+    return el;
+  }
+
+  function setDrawerOpen(open) {
+    drawer.open = open;
+    drawer.el.hidden = !open;
+    drawer.button.setAttribute('aria-expanded', String(open));
+    drawer.button.classList.toggle('kp-active', open);
+    if (!open) return;
+    if (state.collapsed) setCollapsed(false);
+    if (drawer.songs === null) setDrawerStatus('Loading…');
+    loadDrawer();
+    // Skip on touch screens, where focusing would pop the keyboard over the video.
+    if (window.matchMedia && window.matchMedia('(pointer: fine)').matches && drawer.search.focus) {
+      drawer.search.focus({ preventScroll: true });
     }
+  }
+
+  function setDrawerStatus(text) {
+    drawer.status.textContent = text;
+    drawer.status.hidden = !text;
+  }
+
+  // Same rules as collectSongs() in saved.js: only entries the panel would
+  // accept as a saved pitch, newest first, undated (0.3.0) saves last.
+  function collectSavedSongs(items) {
+    const songs = [];
+    for (const [key, pitch] of Object.entries(items || {})) {
+      if (!key.startsWith('savedPitch:')) continue;
+      const id = key.slice('savedPitch:'.length);
+      if (!/^[\w-]{11}$/.test(id)) continue;
+      if (!Number.isInteger(pitch) || pitch < MIN_SEMITONES || pitch > MAX_SEMITONES) continue;
+      const meta = validMeta(items[savedPitchMetaKey(id)]) || {};
+      songs.push({ id, title: meta.title || '', savedAt: meta.savedAt ?? null });
+    }
+    return songs.sort((a, b) =>
+      (b.savedAt ?? -Infinity) - (a.savedAt ?? -Infinity)
+      || (a.title || '\uffff').localeCompare(b.title || '\uffff')
+      || a.id.localeCompare(b.id));
+  }
+
+  async function loadDrawer() {
+    const request = ++drawer.request;
+    try {
+      const items = await browserAPI.storage.local.get(null);
+      if (request !== drawer.request) return;
+      drawer.songs = collectSavedSongs(items);
+    } catch (e) {
+      if (request !== drawer.request) return;
+      drawer.songs = null;
+      drawer.list.replaceChildren();
+      setDrawerStatus('Could not load saved songs.');
+      return;
+    }
+    renderDrawer();
+  }
+
+  function renderDrawer() {
+    if (!drawer.open || drawer.songs === null) return;
+    const terms = (drawer.search.value || '').toLowerCase().split(/\s+/).filter(Boolean);
+    const shown = drawer.songs.filter((song) => {
+      const title = (song.title || 'Untitled video').toLowerCase();
+      return terms.every((term) => title.includes(term));
+    });
+    drawer.list.replaceChildren(...shown.map(renderDrawerSong));
+    setDrawerStatus(!drawer.songs.length ? 'No saved songs yet.' : !shown.length ? 'No matches.' : '');
+  }
+
+  function renderDrawerSong(song) {
+    const item = document.createElement('li');
+    const link = document.createElement('a');
+    const current = song.id === state.videoId;
+    link.className = current ? 'kp-drawer-song kp-current' : 'kp-drawer-song';
+    // Relative, so m.youtube.com stays on m.youtube.com.
+    link.href = `/watch?v=${song.id}`;
+    link.textContent = song.title || 'Untitled video';
+    link.title = link.textContent;
+    if (current) link.setAttribute('aria-current', 'true');
+    item.append(link);
+    return item;
+  }
+
+  function watchSavedSongs() {
+    if (!browserAPI || !browserAPI.storage || !browserAPI.storage.onChanged) return;
+    browserAPI.storage.onChanged.addListener((changes, area) => {
+      // A closed drawer re-reads when it opens; covers savedPitchMeta: too.
+      if (area !== 'local' || !drawer.open) return;
+      if (Object.keys(changes).some((key) => key.startsWith('savedPitch'))) loadDrawer();
+    });
   }
 
   /* ---------- toolbar toggle ---------- */
@@ -638,6 +777,7 @@
     checkVideo();
     startObserving();
     initMessaging();
+    watchSavedSongs();
   }
 
   init().catch((err) => console.warn('[Karaoke Pitch] init failed:', err));
