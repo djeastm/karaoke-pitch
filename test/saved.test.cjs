@@ -143,7 +143,6 @@ test('search matches every term in the title or ID, ignoring case', async () => 
 test('skips anything that is not a valid saved pitch', async () => {
   const app = await setup({
     [`savedPitch:${ID_NEW}`]: 1,
-    [`savedPitchMeta:${ID_NEW}`]: { title: 'The only valid one', savedAt: 5 },
     'savedPitch:short': 2,
     'savedPitch:has spaces!': 2,
     [`savedPitch:${ID_OLD}`]: 13,
@@ -156,38 +155,23 @@ test('skips anything that is not a valid saved pitch', async () => {
   assert.equal(app.count.textContent, '1 saved song');
 });
 
-test('0.3.0 saves without a title stay hidden until they get one, and dated saves come first', async () => {
-  const stored = {
+test('0.3.0 saves without a title show as untitled with their ID, after dated ones', async () => {
+  const app = await setup({
     ...songs(),
     [`savedPitch:${ID_LEGACY}`]: -12,
     // A malformed meta entry is treated as missing.
     'savedPitch:zzzzzzzzzzz': 12,
     'savedPitchMeta:zzzzzzzzzzz': 'not an object',
-    'savedPitch:yyyyyyyyyyy': 1,
-    'savedPitchMeta:yyyyyyyyyyy': { title: '   ' },
-  };
-  const app = await setup(stored);
-  assert.equal(app.rows().length, 3);
-  assert.equal(app.count.textContent, '3 saved songs');
-  app.search('LEGACY');
-  assert.deepEqual(app.rows(), []);
-
-  // The panel fills the title in (without a date) when the video is opened.
-  app.search('');
-  stored[`savedPitchMeta:${ID_LEGACY}`] = { title: 'A Long Lost Favourite' };
-  await app.change({ [`savedPitchMeta:${ID_LEGACY}`]: { newValue: stored[`savedPitchMeta:${ID_LEGACY}`] } });
-  const last = app.rows().at(-1);
-  assert.deepEqual(last, {
-    title: 'A Long Lost Favourite', details: '', pitch: '-12 st', href: `https://www.youtube.com/watch?v=${ID_LEGACY}`,
   });
-  assert.equal(app.count.textContent, '4 saved songs');
-});
-
-test('only untitled 0.3.0 saves explains where they went', async () => {
-  const app = await setup({ [`savedPitch:${ID_LEGACY}`]: 2 });
-  assert.deepEqual(app.rows(), []);
-  assert.equal(app.count.textContent, '0 saved songs');
-  assert.equal(app.status.textContent, 'Songs saved before version 0.4 appear here once you play them again.');
+  const rows = app.rows();
+  assert.equal(rows.length, 5);
+  assert.deepEqual(rows.slice(3), [
+    { title: 'Untitled video', details: ID_LEGACY, pitch: '-12 st', href: `https://www.youtube.com/watch?v=${ID_LEGACY}` },
+    { title: 'Untitled video', details: 'zzzzzzzzzzz', pitch: '+12 st', href: 'https://www.youtube.com/watch?v=zzzzzzzzzzz' },
+  ]);
+  // Untitled saves are still findable by ID.
+  app.search('LEGACY');
+  assert.deepEqual(app.rows().map((row) => row.pitch), ['-12 st']);
 });
 
 test('shows an empty state when nothing has been saved', async () => {

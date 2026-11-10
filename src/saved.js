@@ -29,17 +29,13 @@
   };
 
   let songs = null;
-  let untitled = 0;
   let newTab = false;
   let loadRequest = 0;
 
   // Turns the whole of storage.local into display rows. Anything that the
-  // content script would not accept as a saved pitch is skipped. Saves from
-  // 0.3.0 have no title yet: they are counted but not listed until the panel
-  // fills the title in, the next time the video is opened.
+  // content script would not accept as a saved pitch is skipped.
   function collectSongs(items) {
     const result = [];
-    let withoutTitle = 0;
     for (const [key, pitch] of Object.entries(items || {})) {
       if (!key.startsWith(PITCH_PREFIX)) continue;
       const id = key.slice(PITCH_PREFIX.length);
@@ -48,19 +44,14 @@
       const meta = items[META_PREFIX + id];
       const title = meta && typeof meta.title === 'string' ? meta.title.trim() : '';
       const savedAt = meta && Number.isFinite(meta.savedAt) ? meta.savedAt : null;
-      if (!title) {
-        withoutTitle += 1;
-        continue;
-      }
       result.push({ id, pitch, title, savedAt });
     }
-    // Newest first; 0.3.0 saves whose title was filled in later have no date
-    // and go last, alphabetically so the order stays stable.
-    result.sort((a, b) =>
+    // Newest first; saves from before titles were recorded have no date and
+    // go last, alphabetically so the order stays stable.
+    return result.sort((a, b) =>
       (b.savedAt ?? -Infinity) - (a.savedAt ?? -Infinity)
-      || a.title.localeCompare(b.title)
+      || (a.title || '￿').localeCompare(b.title || '￿')
       || a.id.localeCompare(b.id));
-    return { songs: result, untitled: withoutTitle };
   }
 
   const searchTerms = (query) => query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -91,13 +82,18 @@
     link.rel = newTab ? 'noopener noreferrer' : '';
 
     const title = document.createElement('span');
-    title.className = 'kp-song-title';
-    title.textContent = song.title;
+    title.className = song.title ? 'kp-song-title' : 'kp-song-title kp-untitled';
+    title.textContent = song.title || 'Untitled video';
 
     const details = document.createElement('span');
     details.className = 'kp-song-details';
-    const date = song.savedAt === null ? '' : formatDate(song.savedAt);
-    details.textContent = date ? `Saved ${date}` : '';
+    const parts = [];
+    if (!song.title) parts.push(song.id);
+    if (song.savedAt !== null) {
+      const date = formatDate(song.savedAt);
+      if (date) parts.push(`Saved ${date}`);
+    }
+    details.textContent = parts.join(' · ');
 
     const pitch = document.createElement('span');
     pitch.className = 'kp-pitch';
@@ -124,9 +120,7 @@
     const total = `${songs.length} saved ${songs.length === 1 ? 'song' : 'songs'}`;
     els.count.textContent = terms.length && songs.length ? `${shown.length} of ${total}` : total;
 
-    if (!songs.length && untitled) {
-      setStatus('Songs saved before version 0.4 appear here once you play them again.');
-    } else if (!songs.length) {
+    if (!songs.length) {
       setStatus('No saved songs yet. Open a YouTube video, set the pitch in the Karaoke Pitch panel and click Save.');
     } else if (!shown.length) {
       setStatus(`No saved songs match “${query}”.`);
@@ -142,7 +136,7 @@
       if (request !== loadRequest) return;
       newTab = items?.[NEW_TAB_KEY] === true;
       els.newTab.checked = newTab;
-      ({ songs, untitled } = collectSongs(items));
+      songs = collectSongs(items);
       render();
     } catch (e) {
       if (request !== loadRequest) return;
