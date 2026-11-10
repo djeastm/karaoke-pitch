@@ -31,8 +31,10 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   the browser's add-ons/extensions page) to open **Saved songs**: every video
   you have saved a pitch for, newest first, with its title and pitch. Type in
   the search box to filter by title or video ID; every word must match, and
-  case is ignored. Click a song to open it on YouTube, where the panel offers
-  **Use ±N st**. The list updates by itself when you save from another tab.
+  case is ignored. Click a song to open it on YouTube in the same tab, where
+  the panel offers **Use ±N st**; tick **Open songs in a new tab** to keep the
+  list open instead (the choice is remembered). The list updates by itself
+  when you save from another tab.
   Pitches saved with 0.3.0 have no title yet and show as *Untitled video* with
   their ID until you next click **Use ±N st** on that video, which fills it in.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
@@ -102,7 +104,9 @@ same. Then verify:
   a new tab, listing both with their titles and pitches, newest first (it also
   opens from the extension's **Options** entry). Search by part of a title and
   by part of a video ID, and check a search with no results says so. Click a
-  song and confirm its watch page offers **Use ±N st**. Leave the page open,
+  song and confirm its watch page opens in the same tab and offers **Use ±N
+  st**. Go back, tick **Open songs in a new tab**, and confirm a click now opens
+  a new tab and the box stays ticked after reloading the page. Leave the page open,
   save a third song in another tab, and confirm it appears without a reload.
 
 ## Test on Chrome

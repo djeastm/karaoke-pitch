@@ -21,6 +21,7 @@ class Element {
     this.className = '';
     this.hidden = false;
     this.value = '';
+    this.checked = false;
   }
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this.children = children; }
@@ -43,7 +44,7 @@ const decoy = new Proxy({}, {
 });
 
 async function setup(stored = {}, { globals = ['browser'], decoys = [], get } = {}) {
-  const ids = { count: 'p', search: 'input', status: 'p', list: 'ul' };
+  const ids = { count: 'p', search: 'input', 'new-tab': 'input', status: 'p', list: 'ul' };
   const byId = Object.fromEntries(Object.entries(ids).map(([id, tag]) => [id, new Element(tag)]));
   const document = {
     getElementById: (id) => byId[id] ?? null,
@@ -61,6 +62,7 @@ async function setup(stored = {}, { globals = ['browser'], decoys = [], get } = 
           assert.equal(keys, null);
           return JSON.parse(JSON.stringify(stored));
         },
+        async set(values) { Object.assign(stored, values); },
       },
       onChanged: { addListener: (listener) => changeListeners.push(listener) },
     },
@@ -72,8 +74,11 @@ async function setup(stored = {}, { globals = ['browser'], decoys = [], get } = 
   await flush();
 
   const { list, search, status, count } = byId;
+  const newTab = byId['new-tab'];
   return {
-    reads, stored, status, count,
+    reads, stored, status, count, newTab,
+    targets: () => list.children.map((item) => item.find('kp-link').target),
+    toggleNewTab(checked) { newTab.checked = checked; newTab.emit('change'); },
     rows: () => list.children.map((item) => ({
       title: item.find('kp-song-title').textContent,
       details: item.find('kp-song-details').textContent,
@@ -196,6 +201,28 @@ test('a save made in another tab appears without a reload', async () => {
   // The current search still applies to the refreshed list.
   assert.deepEqual(app.titles(), ['Eclipse of the Heart', 'Total Eclipse — Lyrics']);
   assert.equal(app.count.textContent, '2 of 4 saved songs');
+});
+
+test('songs open in the same tab unless the new-tab option is ticked, which is remembered', async () => {
+  const stored = songs();
+  const app = await setup(stored);
+  assert.equal(app.newTab.checked, false);
+  assert.deepEqual(app.targets(), ['', '', '']);
+
+  app.toggleNewTab(true);
+  await flush();
+  assert.deepEqual(app.targets(), ['_blank', '_blank', '_blank']);
+  assert.equal(stored.savedSongsNewTab, true);
+
+  const reopened = await setup(stored);
+  assert.equal(reopened.newTab.checked, true);
+  assert.deepEqual(reopened.targets(), ['_blank', '_blank', '_blank']);
+
+  // Another open Saved songs page follows the change.
+  stored.savedSongsNewTab = false;
+  await reopened.change({ savedSongsNewTab: { newValue: false } });
+  assert.equal(reopened.newTab.checked, false);
+  assert.deepEqual(reopened.targets(), ['', '', '']);
 });
 
 test('reports a storage failure instead of an empty list', async () => {

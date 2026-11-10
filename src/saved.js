@@ -11,6 +11,8 @@
   const PITCH_PREFIX = 'savedPitch:';
   const META_PREFIX = 'savedPitchMeta:';
   const VIDEO_ID = /^[\w-]{11}$/;
+  // Songs open in this tab unless the user ticks "Open songs in a new tab".
+  const NEW_TAB_KEY = 'savedSongsNewTab';
 
   // Same shim as the content and background scripts: `browser` must win
   // because Firefox also defines a callback-style `chrome`.
@@ -21,11 +23,13 @@
   const els = {
     count: document.getElementById('count'),
     search: document.getElementById('search'),
+    newTab: document.getElementById('new-tab'),
     status: document.getElementById('status'),
     list: document.getElementById('list'),
   };
 
   let songs = null;
+  let newTab = false;
   let loadRequest = 0;
 
   // Turns the whole of storage.local into display rows. Anything that the
@@ -72,8 +76,10 @@
     const link = document.createElement('a');
     link.className = 'kp-link';
     link.href = `https://www.youtube.com/watch?v=${song.id}`;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
+    // Ctrl/middle-click still opens a new tab either way; this sets the
+    // default for a plain click.
+    link.target = newTab ? '_blank' : '';
+    link.rel = newTab ? 'noopener noreferrer' : '';
 
     const title = document.createElement('span');
     title.className = song.title ? 'kp-song-title' : 'kp-song-title kp-untitled';
@@ -128,6 +134,8 @@
     try {
       const items = await browserAPI.storage.local.get(null);
       if (request !== loadRequest) return;
+      newTab = items?.[NEW_TAB_KEY] === true;
+      els.newTab.checked = newTab;
       songs = collectSongs(items);
       render();
     } catch (e) {
@@ -141,10 +149,22 @@
 
   els.search.addEventListener('input', render);
 
+  els.newTab.addEventListener('change', () => {
+    newTab = els.newTab.checked === true;
+    render();
+    try {
+      browserAPI.storage.local.set({ [NEW_TAB_KEY]: newTab }).catch(() => {});
+    } catch (e) {
+      /* the choice still applies until the page is closed */
+    }
+  });
+
   // A save made in another tab shows up here without a reload.
   browserAPI.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (Object.keys(changes).some((key) => key.startsWith(PITCH_PREFIX) || key.startsWith(META_PREFIX))) {
+    // NEW_TAB_KEY keeps the checkbox in step across open Saved songs pages.
+    if (Object.keys(changes).some((key) =>
+      key === NEW_TAB_KEY || key.startsWith(PITCH_PREFIX) || key.startsWith(META_PREFIX))) {
       load();
     }
   });

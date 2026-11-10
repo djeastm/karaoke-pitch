@@ -76,6 +76,21 @@ h1 {
   outline-offset: 1px;
 }
 
+.kp-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.kp-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .kp-status {
   margin: 24px 0;
   color: var(--muted);
