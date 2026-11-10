@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Saved songs · Karaoke Pitch</title>
+  <link rel="stylesheet" href="saved.css">
+</head>
+<body>
+  <main class="kp-saved-page">
+    <header>
+      <h1>&#x266C; Saved songs</h1>
+      <p id="count" class="kp-count" aria-live="polite"></p>
+    </header>
+    <input id="search" class="kp-search" type="search" placeholder="Search by title or video ID"
+           aria-label="Search saved songs" autocomplete="off" spellcheck="false">
+    <p id="status" class="kp-status">Loading…</p>
+    <ul id="list" class="kp-list"></ul>
+  </main>
+  <script src="saved.js"></script>
+</body>
+</html>

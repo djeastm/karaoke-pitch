@@ -27,6 +27,14 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   current pitch already matches. Adjust the slider or use **− / +**, then click
   **Save** to replace the saved value. **Reset** returns to zero without deleting
   the saved pitch, so you can click the button to restore it again.
+- Click **☰** in the panel's title bar (or the extension's **Options** entry in
+  the browser's add-ons/extensions page) to open **Saved songs**: every video
+  you have saved a pitch for, newest first, with its title and pitch. Type in
+  the search box to filter by title or video ID; every word must match, and
+  case is ignored. Click a song to open it on YouTube, where the panel offers
+  **Use ±N st**. The list updates by itself when you save from another tab.
+  Pitches saved with 0.3.0 have no title yet and show as *Untitled video* with
+  their ID until you next click **Use ±N st** on that video, which fills it in.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
   to show or hide it — handy for turning it off when you're not watching a
   karaoke video. The toolbar button is a master switch: hiding the panel also
@@ -49,8 +57,9 @@ npm run build:chrome    # dist/chrome only
 ```
 
 Each target gets its own folder — `dist/firefox/` and `dist/chrome/` —
-containing `manifest.json`, the bundled `content.js` and `background.js`,
-`panel.css`, icons, and the web-accessible `soundtouch-processor.js`.
+containing `manifest.json`, the bundled `content.js`, `background.js` and
+`saved.js`, `panel.css`, the Saved songs page (`saved.html`, `saved.css`),
+icons, and the web-accessible `soundtouch-processor.js`.
 
 All of `src/` is shared. The two targets diverge in exactly two places, both
 handled by `build.js`:
@@ -89,6 +98,12 @@ same. Then verify:
   reload, and verify each offers its own saved value without applying it
   automatically. Check that Reset preserves it and manual adjustments can be
   saved as a replacement. A saved pitch of zero should work too.
+- With two songs saved, click **☰** in the panel: the Saved songs page opens in
+  a new tab, listing both with their titles and pitches, newest first (it also
+  opens from the extension's **Options** entry). Search by part of a title and
+  by part of a video ID, and check a search with no results says so. Click a
+  song and confirm its watch page offers **Use ±N st**. Leave the page open,
+  save a third song in another tab, and confirm it appears without a reload.
 
 ## Test on Chrome
 
@@ -160,7 +175,8 @@ The listing also asks for justifications, which are worth having ready:
 
 - **Single purpose:** shifts the pitch of YouTube audio for singing along.
 - **`storage` permission:** remembers the chosen pitch and the panel's
-  visibility, per video, on the local device.
+  visibility, and the pitch and title of each video you save, on the local
+  device.
 - **`youtube.com` host access:** the extension only functions on YouTube watch,
   Shorts, embed, and live pages, where the `<video>` element it processes lives.
 - **Data use:** nothing is collected or transmitted; all state stays in

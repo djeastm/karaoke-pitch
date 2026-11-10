@@ -39,6 +39,7 @@
     saveBtn: null,
     videoId: null,
     savedPitch: null,
+    savedMeta: null,
     savedPitchReady: false,
     restoreSavedPitch: true,
     savingPitch: false,
@@ -48,6 +49,9 @@
   const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
   const formatPitch = (s) => `${s > 0 ? '+' : ''}${s} st`;
   const savedPitchKey = (videoId) => `savedPitch:${videoId}`;
+  // Kept beside the bare integer under savedPitch:<id> (which stays as it was in
+  // 0.3.0) so the Saved songs page can show something more useful than an ID.
+  const savedPitchMetaKey = (videoId) => `savedPitchMeta:${videoId}`;
   let savedPitchRequest = 0;
 
   /* ---------- persistence ---------- */
@@ -59,12 +63,71 @@
     return id && /^[\w-]{11}$/.test(id) ? id : null;
   }
 
+  const collapseSpace = (text) => String(text ?? '').replace(/\s+/g, ' ').trim();
+
+  // "(3) Song title - YouTube" -> "Song title". The tab title is the fallback
+  // for pages without the watch metadata (Shorts, embeds), and may be generic.
+  function cleanDocumentTitle(text) {
+    const title = collapseSpace(text)
+      .replace(/^\(\d+\+?\)\s*/, '')
+      .replace(/\s+-\s+YouTube$/, '')
+      .trim();
+    return title === 'YouTube' ? '' : title;
+  }
+
+  // YouTube swaps the watch page in place, so the heading can briefly belong to
+  // the previous video; only trust it once the page says which video it shows.
+  function currentVideoTitle(videoId) {
+    const page = document.querySelector('ytd-watch-flexy[video-id]');
+    if (page && page.getAttribute('video-id') === videoId) {
+      const heading = collapseSpace(document.querySelector('ytd-watch-metadata h1')?.textContent);
+      if (heading) return heading;
+    }
+    return cleanDocumentTitle(document.title);
+  }
+
+  function validMeta(value) {
+    if (!value || typeof value !== 'object') return null;
+    const meta = {};
+    if (typeof value.title === 'string' && value.title.trim()) meta.title = value.title.trim();
+    if (Number.isFinite(value.savedAt)) meta.savedAt = value.savedAt;
+    return meta;
+  }
+
+  async function readSavedMeta(videoId) {
+    const key = savedPitchMetaKey(videoId);
+    try {
+      return validMeta((await browserAPI.storage.local.get(key))[key]);
+    } catch (e) {
+      // The title is a nicety; never let it block the saved pitch itself.
+      return null;
+    }
+  }
+
+  // Saves from 0.3.0 have a pitch but no title. Fill it in the next time the
+  // user applies one, so the Saved songs page can name it.
+  function backfillSavedTitle() {
+    const videoId = state.videoId;
+    const meta = state.savedMeta || {};
+    if (!videoId || meta.title) return;
+    const title = currentVideoTitle(videoId);
+    if (!title) return;
+    const next = { ...meta, title };
+    state.savedMeta = next;
+    try {
+      browserAPI.storage.local.set({ [savedPitchMetaKey(videoId)]: next }).catch(() => {});
+    } catch (e) {
+      /* ignore */
+    }
+  }
+
   async function syncSavedPitch() {
     const videoId = currentVideoId();
     if (videoId === state.videoId) return;
     const request = ++savedPitchRequest;
     state.videoId = videoId;
     state.savedPitch = null;
+    state.savedMeta = null;
     state.savedPitchReady = false;
     state.restoreSavedPitch = true;
     state.savingPitch = false;
@@ -74,11 +137,15 @@
 
     try {
       const key = savedPitchKey(videoId);
-      const result = await browserAPI.storage.local.get(key);
+      const [result, meta] = await Promise.all([
+        browserAPI.storage.local.get(key),
+        readSavedMeta(videoId),
+      ]);
       if (request !== savedPitchRequest) return;
       const pitch = result[key];
       state.savedPitch = Number.isInteger(pitch) && pitch >= MIN_SEMITONES && pitch <= MAX_SEMITONES
         ? pitch : null;
+      state.savedMeta = meta;
       state.savedPitchReady = true;
     } catch (e) {
       if (request !== savedPitchRequest) return;
@@ -96,19 +163,29 @@
     if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
     if (state.restoreSavedPitch && state.savedPitch !== null) {
       setSemitones(state.savedPitch);
+      backfillSavedTitle();
       return;
     }
 
     const request = savedPitchRequest;
     const videoId = state.videoId;
     const pitch = state.semitones;
+    // Keep a title we already know rather than blanking it if the page has
+    // none to offer right now.
+    const title = currentVideoTitle(videoId) || state.savedMeta?.title || '';
+    const meta = { title, savedAt: Date.now() };
     state.savingPitch = true;
     state.saveError = false;
     updateSaveButton();
     try {
-      await browserAPI.storage.local.set({ [savedPitchKey(videoId)]: pitch });
+      // One write, so the index never sees a pitch without its title.
+      await browserAPI.storage.local.set({
+        [savedPitchKey(videoId)]: pitch,
+        [savedPitchMetaKey(videoId)]: meta,
+      });
       if (request !== savedPitchRequest) return;
       state.savedPitch = pitch;
+      state.savedMeta = validMeta(meta);
     } catch (e) {
       if (request !== savedPitchRequest) return;
       state.saveError = true;
@@ -391,7 +468,16 @@
     collapse.className = 'kp-iconbtn';
     collapse.textContent = '\u2014';
     collapse.setAttribute('aria-label', 'Minimize panel');
-    handle.append(title, collapse);
+    const songs = document.createElement('button');
+    songs.type = 'button';
+    songs.className = 'kp-iconbtn kp-songs';
+    songs.textContent = '☰';
+    songs.title = 'Saved songs';
+    songs.setAttribute('aria-label', 'Saved songs');
+    const actions = document.createElement('span');
+    actions.className = 'kp-actions';
+    actions.append(songs, collapse);
+    handle.append(title, actions);
 
     const body = document.createElement('div');
     body.className = 'kp-body';
@@ -459,6 +545,7 @@
     minus.addEventListener('click', () => step(-1));
     plus.addEventListener('click', () => step(1));
     save.addEventListener('click', saveOrRestorePitch);
+    songs.addEventListener('click', openSavedSongs);
     reset.addEventListener('click', () => setSemitones(0, true));
     toggle.addEventListener('click', () => {
       state.enabled = !state.enabled;
@@ -514,6 +601,16 @@
     };
     handle.addEventListener('pointerup', endDrag);
     handle.addEventListener('pointercancel', endDrag);
+  }
+
+  // Content scripts cannot call runtime.openOptionsPage(), so ask the
+  // background script to open the Saved songs page for us.
+  function openSavedSongs() {
+    try {
+      browserAPI.runtime.sendMessage({ type: 'openSavedSongs' }).catch(() => {});
+    } catch (e) {
+      /* extension context invalidated (e.g., after an update) */
+    }
   }
 
   /* ---------- toolbar toggle ---------- */

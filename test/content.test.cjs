@@ -43,7 +43,7 @@ const decoy = new Proxy({}, {
   },
 });
 
-async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoys = [] } = {}) {
+async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoys = [], page = {} } = {}) {
   const elements = [];
   const document = new Element('document');
   document.body = new Element('body');
@@ -55,7 +55,16 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
   };
   // Keeping the same discovered element tests navigation independently of
   // replacing the media element, as on YouTube's single-page watch view.
-  document.querySelector = () => null;
+  // `page` stands in for YouTube's watch DOM: which video the watch page says
+  // it shows, its <h1>, and the tab title.
+  document.querySelector = (selector) => {
+    if (selector === 'ytd-watch-flexy[video-id]' && page.videoId) {
+      return { getAttribute: (name) => (name === 'video-id' ? page.videoId : null) };
+    }
+    if (selector === 'ytd-watch-metadata h1' && page.heading) return { textContent: page.heading };
+    return null;
+  };
+  Object.defineProperty(document, 'title', { get: () => page.title ?? '' });
   const window = new Element('window');
   window.top = window;
   window.location = { href: `https://www.youtube.com/watch?v=${VIDEO_A}` };
@@ -67,7 +76,14 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
     async set(values) { Object.assign(stored, values); },
     ...overrides,
   };
-  const api = { storage: { local: storage }, runtime: { onMessage: { addListener() {} } } };
+  const messages = [];
+  const api = {
+    storage: { local: storage },
+    runtime: {
+      onMessage: { addListener() {} },
+      async sendMessage(message) { messages.push(message); },
+    },
+  };
   const sandbox = {
     window, document, URL, console,
     MutationObserver: class { observe() {} },
@@ -80,7 +96,8 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
   const save = elements.find((element) => element.className?.includes('kp-save'));
   const slider = elements.find((element) => element.tag === 'input');
   return {
-    save, slider, stored, storage, elements,
+    save, slider, stored, storage, elements, messages, page,
+    songs: elements.find((element) => element.className?.includes('kp-songs')),
     reset: elements.find((element) => element.textContent === 'Reset'),
     edit(value) { slider.value = String(value); slider.emit('input'); },
     async navigate(path, event = 'yt-navigate-finish') {
@@ -214,4 +231,74 @@ test('`browser` wins on Firefox, which defines a callback-style `chrome` too', a
     { globals: ['browser'], decoys: ['chrome'] }
   );
   assert.equal(app.save.textContent, 'Use +3 st');
+});
+
+test('Save also records the video’s title and when it was saved', async () => {
+  const before = Date.now();
+  const app = await setup({}, {}, {
+    page: { videoId: VIDEO_A, heading: '  Bohemian   Rhapsody\n (Karaoke) ', title: 'Stale - YouTube' },
+  });
+  app.edit(-2);
+  app.save.emit('click');
+  await flush();
+  // The pitch itself is stored exactly as in 0.3.0.
+  assert.equal(app.stored[`savedPitch:${VIDEO_A}`], -2);
+  const meta = app.stored[`savedPitchMeta:${VIDEO_A}`];
+  assert.equal(meta.title, 'Bohemian Rhapsody (Karaoke)');
+  assert.ok(meta.savedAt >= before && meta.savedAt <= Date.now());
+});
+
+test('a heading from the previous video is ignored in favour of the tab title', async () => {
+  const app = await setup({}, {}, {
+    page: { videoId: VIDEO_B, heading: 'Previous song', title: '(12) Next song - YouTube' },
+  });
+  app.save.emit('click');
+  await flush();
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`].title, 'Next song');
+
+  // A generic tab title is no title at all, but a known one is kept.
+  app.page.title = 'YouTube';
+  app.edit(3);
+  app.save.emit('click');
+  await flush();
+  assert.equal(app.stored[`savedPitch:${VIDEO_A}`], 3);
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`].title, 'Next song');
+
+  const untitled = await setup({}, {}, { page: { title: 'YouTube' } });
+  untitled.save.emit('click');
+  await flush();
+  assert.equal(untitled.stored[`savedPitchMeta:${VIDEO_A}`].title, '');
+});
+
+test('applying a 0.3.0 save fills in its missing title', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_A}`]: 4 }, {}, {
+    page: { videoId: VIDEO_A, heading: 'Old favourite' },
+  });
+  assert.equal(app.save.textContent, 'Use +4 st');
+  app.save.emit('click');
+  await flush();
+  assert.equal(app.slider.value, '4');
+  assert.equal(app.stored[`savedPitch:${VIDEO_A}`], 4);
+  // No date is invented for a save whose time was never recorded.
+  assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
+});
+
+test('applying a save that already has a title leaves it alone', async () => {
+  const meta = { title: 'Original title', savedAt: 1700000000000 };
+  const app = await setup({ [`savedPitch:${VIDEO_A}`]: -1, [`savedPitchMeta:${VIDEO_A}`]: meta }, {}, {
+    page: { videoId: VIDEO_A, heading: 'Renamed upload' },
+  });
+  app.save.emit('click');
+  await flush();
+  assert.equal(app.slider.value, '-1');
+  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`], meta);
+});
+
+test('the ☰ button asks the background script to open Saved songs', async () => {
+  const app = await setup();
+  assert.equal(app.songs.textContent, '\u2630');
+  assert.equal(app.songs.attributes['aria-label'], 'Saved songs');
+  app.songs.emit('click');
+  await flush();
+  assert.deepEqual(app.messages.map((message) => ({ ...message })), [{ type: 'openSavedSongs' }]);
 });

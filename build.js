@@ -94,7 +94,9 @@ async function build(name) {
   const manifest = target.manifest(JSON.parse(JSON.stringify(baseManifest)));
   fs.writeFileSync(path.join(outDir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 
-  copy(path.join(srcDir, 'panel.css'), path.join(outDir, 'panel.css'));
+  for (const file of ['panel.css', 'saved.html', 'saved.css']) {
+    copy(path.join(srcDir, file), path.join(outDir, file));
+  }
   copy(path.join(srcDir, 'THIRD_PARTY_NOTICES.txt'), path.join(outDir, 'THIRD_PARTY_NOTICES.txt'));
   copy(processorPath, path.join(outDir, 'soundtouch-processor.js'));
 
@@ -105,7 +107,7 @@ async function build(name) {
     copy(path.join(srcDir, 'icons', 'icon-disabled.svg'), path.join(outDir, 'icons', 'icon-disabled.svg'));
   }
 
-  for (const entry of ['content.js', 'background.js']) {
+  for (const entry of ['content.js', 'background.js', 'saved.js']) {
     esbuild.buildSync({
       entryPoints: [path.join(srcDir, entry)],
       bundle: true,

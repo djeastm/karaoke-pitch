@@ -39,3 +39,11 @@ test('both targets agree on version and content script matches', () => {
   assert.deepEqual(chrome.web_accessible_resources, firefox.web_accessible_resources);
   assert.deepEqual(chrome.permissions, firefox.permissions);
 });
+
+test('both targets open the Saved songs page as the options page, in a tab', () => {
+  for (const name of ['firefox', 'chrome']) {
+    assert.deepEqual(manifestFor(name).options_ui, { page: 'saved.html', open_in_tab: true }, name);
+  }
+  // The index reads storage it already has; it needs nothing new.
+  assert.deepEqual(baseManifest.permissions, ['storage']);
+});

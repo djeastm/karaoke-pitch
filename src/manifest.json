@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Karaoke Pitch",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shift a YouTube video's pitch up or down without changing tempo, to make karaoke songs easier to sing.",
   "icons": {
     "32": "icons/icon.svg",
@@ -21,6 +21,10 @@
   "permissions": ["storage"],
   "background": {
     "scripts": ["background.js"]
+  },
+  "options_ui": {
+    "page": "saved.html",
+    "open_in_tab": true
   },
   "action": {
     "default_title": "Karaoke Pitch",

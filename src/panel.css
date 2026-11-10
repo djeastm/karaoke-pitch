@@ -38,6 +38,12 @@
   pointer-events: none;
 }
 
+.kp-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .kp-iconbtn {
   background: transparent;
   border: none;

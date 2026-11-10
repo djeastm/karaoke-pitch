@@ -1,0 +1,163 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f7f7f8;
+  --card: #ffffff;
+  --text: #1a1a1a;
+  --muted: #5f6368;
+  --border: #dadce0;
+  --hover: #f1f3f4;
+  --accent: #c4002b;
+  --pitch-bg: #fce8ec;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #181818;
+    --card: #222222;
+    --text: #f1f1f1;
+    --muted: #aaaaaa;
+    --border: #3a3a3a;
+    --hover: #2c2c2c;
+    --accent: #ff4d6d;
+    --pitch-bg: #3a1d24;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Roboto, "Segoe UI", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.kp-saved-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px 48px;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.kp-count {
+  margin: 0;
+  color: var(--muted);
+}
+
+.kp-search {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font: inherit;
+}
+
+.kp-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kp-status {
+  margin: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.kp-status[hidden] {
+  display: none;
+}
+
+.kp-list {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  overflow: hidden;
+}
+
+.kp-list:empty {
+  display: none;
+}
+
+.kp-song {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 16px;
+}
+
+.kp-song + .kp-song {
+  border-top: 1px solid var(--border);
+}
+
+.kp-song:hover {
+  background: var(--hover);
+}
+
+.kp-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.kp-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.kp-song-title {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.kp-link:hover .kp-song-title {
+  text-decoration: underline;
+}
+
+.kp-untitled {
+  font-style: italic;
+}
+
+.kp-song-details {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.kp-song-details:empty {
+  display: none;
+}
+
+.kp-pitch {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--pitch-bg);
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
