@@ -42,7 +42,9 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
 - Pitches saved before 0.4 have no title, so both lists show them as
   *Untitled video* (last, in the drawer) until you open that video again. The
   panel then records its title automatically, without changing or applying
-  the pitch.
+  the pitch. If the title can't be picked up but the pitch you have set
+  already matches the saved one, **Save** stays clickable (instead of showing
+  **Saved ✓**) so one click stores the title.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
   to show or hide it — handy for turning it off when you're not watching a
   karaoke video. The toolbar button is a master switch: hiding the panel also
@@ -118,7 +120,9 @@ same. Then verify:
   video*; click it in the ☰ drawer, wait for the title to appear on the page,
   and confirm the drawer now shows the correct title without clicking
   anything else. Also try reaching it from another video's page and check it
-  doesn't pick up the previous video's title.
+  doesn't pick up the previous video's title. If the title isn't picked up and
+  your current pitch matches the saved one, check **Save** is clickable and
+  stores the title.
 - Open the extension's **Options** entry: the Saved songs page lists both songs
   with titles and pitches, newest first. Search by part of a title and by part
   of a video ID. Click a song and confirm it opens in the same tab; go back,
