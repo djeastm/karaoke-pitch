@@ -94,7 +94,7 @@ async function setup(stored = {}, overrides = {}, { globals = ['browser'], decoy
   const save = elements.find((element) => element.className?.includes('kp-save'));
   const slider = elements.find((element) => element.tag === 'input');
   return {
-    save, slider, stored, storage, elements, page,
+    save, slider, stored, storage, elements, page, document,
     songs: elements.find((element) => element.className?.includes('kp-songs')),
     drawer: elements.find((element) => element.className === 'kp-drawer'),
     drawerSearch: elements.find((element) => element.className === 'kp-drawer-search'),
@@ -289,6 +289,29 @@ test('applying a 0.3.0 save fills in its missing title', async () => {
   assert.equal(app.stored[`savedPitch:${VIDEO_A}`], 4);
   // No date is invented for a save whose time was never recorded.
   assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
+});
+
+test('an untitled save already at the current pitch still offers Use to fill in its title', async () => {
+  // The pitch left over from the previous video matches this 0.3.0 save.
+  const app = await setup({ semitones: 4, [`savedPitch:${VIDEO_A}`]: 4 }, {}, {
+    page: { videoId: VIDEO_A, title: 'YouTube' },
+  });
+  // Nothing to record yet, so there is nothing to click.
+  assert.equal(app.save.textContent, 'Saved ✓');
+  assert.equal(app.save.disabled, true);
+
+  // Once the page shows the title, "Use" can record it.
+  app.page.heading = 'Old favourite';
+  app.document.emit('yt-navigate-finish');
+  await flush();
+  assert.equal(app.save.textContent, 'Use +4 st');
+  assert.equal(app.save.disabled, false);
+  app.save.emit('click');
+  await flush();
+  assert.equal(app.slider.value, '4');
+  assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
+  assert.equal(app.save.textContent, 'Saved ✓');
+  assert.equal(app.save.disabled, true);
 });
 
 test('applying a save that already has a title leaves it alone', async () => {

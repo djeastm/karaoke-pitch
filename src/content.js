@@ -129,6 +129,7 @@
     if (!title) return;
     const next = { ...meta, title };
     state.savedMeta = next;
+    updateSaveButton();
     try {
       browserAPI.storage.local.set({ [savedPitchMetaKey(videoId)]: next }).catch(() => {});
     } catch (e) {
@@ -177,7 +178,9 @@
       return;
     }
     if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
-    if (state.restoreSavedPitch && state.savedPitch !== null) {
+    // A save without a title offers "Use" even when its pitch is already
+    // applied, so a click can still fill the title in.
+    if (state.savedPitch !== null && (state.restoreSavedPitch || canAddSavedTitle())) {
       setSemitones(state.savedPitch);
       backfillSavedTitle();
       return;
@@ -374,6 +377,9 @@
 
   function checkVideo() {
     syncSavedPitch();
+    // YouTube can render the title after the saved pitch has loaded, and
+    // whether "Use" can fill it in depends on that.
+    updateSaveButton();
     const current = findVideo();
     if (current === state.video) return;
     if (state.video && !state.video.isConnected) detachVideo();
@@ -418,11 +424,20 @@
     updateSaveButton();
   }
 
+  // The saved pitch is already applied but has no title (e.g. a 0.3.0 save,
+  // opened with the pitch left over from the previous video), and the page
+  // has one to record.
+  function canAddSavedTitle() {
+    return state.savedPitchReady && state.savedPitch !== null && state.savedPitch === state.semitones
+      && !state.savedMeta?.title && Boolean(currentVideoTitle(state.videoId));
+  }
+
   function updateSaveButton() {
     const button = state.saveBtn;
     if (!button) return;
     const hasSavedPitch = state.savedPitch !== null;
     const matches = hasSavedPitch && state.savedPitch === state.semitones;
+    const addsTitle = canAddSavedTitle();
     const canRestore = hasSavedPitch && state.restoreSavedPitch && !matches;
     let label = 'Save';
     let title = `Save ${formatPitch(state.semitones)} for this video`;
@@ -437,6 +452,9 @@
     } else if (!state.savedPitchReady) {
       label = 'Loading…';
       title = 'Loading saved pitch for this video';
+    } else if (addsTitle) {
+      label = `Use ${formatPitch(state.savedPitch)}`;
+      title = `Use the saved pitch of ${formatPitch(state.savedPitch)} and record this video's title`;
     } else if (matches) {
       label = 'Saved ✓';
       title = `${formatPitch(state.savedPitch)} is saved for this video. Adjust the pitch to save a new value.`;
@@ -449,7 +467,7 @@
     if (button.textContent !== label) button.textContent = label;
     button.title = title;
     button.setAttribute('aria-label', title);
-    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError);
+    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError && !addsTitle);
     button.classList.toggle('kp-saved', hasSavedPitch && !state.saveError);
   }
 
