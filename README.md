@@ -39,6 +39,9 @@ video → MediaElementAudioSourceNode → SoundTouchNode (pitch shift) → GainN
   by title or video ID. Songs open in the same tab; tick **Open songs in a new
   tab** to keep the list open instead (the choice is remembered). The list
   updates by itself when you save from another tab.
+- Click **✕** beside a song on the Saved songs page to remove it, for example
+  when the video is no longer available. **Undo** puts the last removed song
+  back. An open video's panel notices the removal and offers **Save** again.
 - Pitches saved with 0.3.0 have no title yet and show as *Untitled video* until
   you next click **Use ±N st** on that video, which fills it in.
 - The panel is **hidden by default**. Click the toolbar button (🎵 Karaoke Pitch)
@@ -117,6 +120,10 @@ same. Then verify:
   tick **Open songs in a new tab**, and confirm a click now opens a new tab and
   the box stays ticked after reloading the page. Leave the page open, save a
   third song in another tab, and confirm it appears without a reload.
+- On the Saved songs page, click **✕** beside a song: it disappears and
+  **Removed “…”** offers **Undo**, which brings it back with its title, pitch
+  and date. Remove it again with that video open in another tab and confirm
+  the panel's **Saved ✓** turns back into **Save**.
 
 ## Test on Chrome
 

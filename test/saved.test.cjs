@@ -22,8 +22,11 @@ class Element {
     this.hidden = false;
     this.value = '';
     this.checked = false;
+    this.attributes = {};
   }
   append(...children) { this.children.push(...children); }
+  setAttribute(name, value) { this.attributes[name] = value; }
+  focus() { focused = this; }
   replaceChildren(...children) { this.children = children; }
   addEventListener(name, listener) { (this.listeners[name] ||= []).push(listener); }
   emit(name) { for (const listener of this.listeners[name] || []) listener({ target: this }); }
@@ -37,14 +40,20 @@ class Element {
   }
 }
 
+// The element most recently given focus, across every page set up.
+let focused = null;
+
 const decoy = new Proxy({}, {
   get(_target, prop) {
     throw new Error(`unexpected use of the decoy extension API (read "${String(prop)}")`);
   },
 });
 
-async function setup(stored = {}, { globals = ['browser'], decoys = [], get } = {}) {
-  const ids = { count: 'p', search: 'input', 'new-tab': 'input', status: 'p', list: 'ul' };
+async function setup(stored = {}, { globals = ['browser'], decoys = [], get, remove } = {}) {
+  const ids = {
+    count: 'p', search: 'input', 'new-tab': 'input', status: 'p', list: 'ul',
+    notice: 'p', 'notice-text': 'span', undo: 'button',
+  };
   const byId = Object.fromEntries(Object.entries(ids).map(([id, tag]) => [id, new Element(tag)]));
   const document = {
     getElementById: (id) => byId[id] ?? null,
@@ -63,6 +72,10 @@ async function setup(stored = {}, { globals = ['browser'], decoys = [], get } = 
           return JSON.parse(JSON.stringify(stored));
         },
         async set(values) { Object.assign(stored, values); },
+        async remove(keys) {
+          if (remove) return remove(keys);
+          for (const key of [].concat(keys)) delete stored[key];
+        },
       },
       onChanged: { addListener: (listener) => changeListeners.push(listener) },
     },
@@ -73,10 +86,14 @@ async function setup(stored = {}, { globals = ['browser'], decoys = [], get } = 
   vm.runInNewContext(savedScript, sandbox);
   await flush();
 
-  const { list, search, status, count } = byId;
+  const { list, search, status, count, notice, undo } = byId;
   const newTab = byId['new-tab'];
   return {
-    reads, stored, status, count, newTab,
+    reads, stored, status, count, newTab, notice, undo, searchBox: search,
+    noticeText: () => (notice.hidden ? '' : byId['notice-text'].textContent),
+    removeButtons: () => list.children.map((item) => item.find('kp-remove')),
+    async remove(index) { this.removeButtons()[index].emit('click'); await flush(); },
+    async undoRemove() { undo.emit('click'); await flush(); },
     targets: () => list.children.map((item) => item.find('kp-link').target),
     toggleNewTab(checked) { newTab.checked = checked; newTab.emit('change'); },
     rows: () => list.children.map((item) => ({
@@ -240,4 +257,73 @@ test('the extension API resolves on Chrome, which defines only `chrome`', async 
 test('`browser` wins on Firefox, which defines a callback-style `chrome` too', async () => {
   const app = await setup(songs(), { globals: ['browser'], decoys: ['chrome'] });
   assert.equal(app.rows().length, 3);
+});
+
+test('✕ removes a song’s pitch and title from storage, and Undo puts both back', async () => {
+  const stored = songs();
+  const app = await setup(stored);
+  assert.equal(app.removeButtons()[1].attributes['aria-label'], 'Remove “Queen Medley” from saved songs');
+
+  await app.remove(1);
+  assert.deepEqual(app.titles(), ['Total Eclipse — Lyrics', 'Dancing Queen (Karaoke Version)']);
+  assert.equal(app.count.textContent, '2 saved songs');
+  assert.equal(`savedPitch:${ID_MID}` in stored, false);
+  assert.equal(`savedPitchMeta:${ID_MID}` in stored, false);
+  assert.equal(stored[`savedPitch:${ID_OLD}`], -3);
+  assert.equal(app.noticeText(), 'Removed “Queen Medley”.');
+  assert.equal(app.undo.hidden, false);
+  // Focus moves to the row that took its place.
+  assert.equal(focused, app.removeButtons()[1]);
+
+  // The change event from the removal re-reads without bringing it back.
+  await app.change({ [`savedPitch:${ID_MID}`]: { oldValue: 0 } });
+  assert.equal(app.titles().length, 2);
+
+  await app.undoRemove();
+  assert.equal(stored[`savedPitch:${ID_MID}`], 0);
+  assert.deepEqual({ ...stored[`savedPitchMeta:${ID_MID}`] }, { title: 'Queen Medley', savedAt: 2000 });
+  assert.deepEqual(app.titles(), ['Total Eclipse — Lyrics', 'Queen Medley', 'Dancing Queen (Karaoke Version)']);
+  assert.equal(app.noticeText(), '');
+  assert.equal(focused, app.removeButtons()[1]);
+});
+
+test('only the latest removal can be undone', async () => {
+  const stored = songs();
+  const app = await setup(stored);
+  await app.remove(0);
+  await app.remove(0);
+  assert.deepEqual(app.titles(), ['Dancing Queen (Karaoke Version)']);
+  assert.equal(app.noticeText(), 'Removed “Queen Medley”.');
+
+  await app.undoRemove();
+  assert.equal(`savedPitch:${ID_NEW}` in stored, false);
+  assert.equal(stored[`savedPitch:${ID_MID}`], 0);
+  assert.deepEqual(app.titles(), ['Queen Medley', 'Dancing Queen (Karaoke Version)']);
+});
+
+test('an untitled save can be removed while searching, and restored without inventing a title', async () => {
+  const stored = { ...songs(), [`savedPitch:${ID_LEGACY}`]: 4 };
+  const app = await setup(stored);
+  app.search('legacy');
+  await app.remove(0);
+  assert.equal(`savedPitch:${ID_LEGACY}` in stored, false);
+  assert.equal(app.noticeText(), `Removed untitled video ${ID_LEGACY}.`);
+  assert.equal(app.status.textContent, 'No saved songs match “legacy”.');
+  assert.equal(app.count.textContent, '0 of 3 saved songs');
+  // With no rows left, focus falls back to the search box.
+  assert.equal(focused, app.searchBox);
+
+  await app.undoRemove();
+  assert.equal(stored[`savedPitch:${ID_LEGACY}`], 4);
+  assert.equal(`savedPitchMeta:${ID_LEGACY}` in stored, false);
+  assert.deepEqual(app.rows().map((row) => row.details), [ID_LEGACY]);
+});
+
+test('a failed removal says so and shows the song again', async () => {
+  const stored = songs();
+  const app = await setup(stored, { remove: async () => { throw new Error('Storage unavailable'); } });
+  await app.remove(0);
+  assert.equal(app.noticeText(), 'Could not remove “Total Eclipse — Lyrics”. Try again.');
+  assert.equal(app.undo.hidden, true);
+  assert.equal(app.titles().length, 3);
 });

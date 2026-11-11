@@ -426,3 +426,29 @@ test('the drawer reports a storage failure', async () => {
   await app.openDrawer();
   assert.equal(app.drawerStatus.textContent, 'Could not load saved songs.');
 });
+
+test('removing the open video’s save elsewhere turns Saved ✓ back into Save', async () => {
+  const stored = { semitones: -2, [`savedPitch:${VIDEO_A}`]: -2, [`savedPitchMeta:${VIDEO_A}`]: { title: 'Song', savedAt: 1 } };
+  const app = await setup(stored);
+  assert.equal(app.save.textContent, 'Saved ✓');
+
+  // Other videos' changes are ignored.
+  await app.storageChanged({ [`savedPitch:${VIDEO_B}`]: { oldValue: 3 } });
+  assert.equal(app.save.textContent, 'Saved ✓');
+
+  delete stored[`savedPitch:${VIDEO_A}`];
+  delete stored[`savedPitchMeta:${VIDEO_A}`];
+  await app.storageChanged({
+    [`savedPitch:${VIDEO_A}`]: { oldValue: -2 },
+    [`savedPitchMeta:${VIDEO_A}`]: { oldValue: { title: 'Song', savedAt: 1 } },
+  });
+  assert.equal(app.save.textContent, 'Save');
+  assert.equal(app.save.disabled, false);
+
+  // Undo on the Saved songs page brings it back.
+  await app.storageChanged({
+    [`savedPitch:${VIDEO_A}`]: { newValue: -2 },
+    [`savedPitchMeta:${VIDEO_A}`]: { newValue: { title: 'Song', savedAt: 1 } },
+  });
+  assert.equal(app.save.textContent, 'Saved ✓');
+});

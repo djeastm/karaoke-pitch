@@ -1,7 +1,8 @@
 /* Karaoke Pitch — Saved songs page.
  * Lists every per-video pitch saved from the panel, newest first, with a
  * search box. Registered as the options page and opened from the panel's ☰
- * button. Reads storage.local only; nothing here writes.
+ * button. The only writes are the new-tab option and removing a save (which
+ * can be undone).
  */
 (() => {
   'use strict';
@@ -26,11 +27,19 @@
     newTab: document.getElementById('new-tab'),
     status: document.getElementById('status'),
     list: document.getElementById('list'),
+    notice: document.getElementById('notice'),
+    noticeText: document.getElementById('notice-text'),
+    undo: document.getElementById('undo'),
   };
 
   let songs = null;
   let newTab = false;
   let loadRequest = 0;
+  // The last removal, kept so Undo can write it back. `done` settles once
+  // storage has dropped it, so the restore can't land before the removal.
+  let removed = null;
+  // The rendered rows' Remove buttons, in order, for moving focus after one goes.
+  let removeButtons = [];
 
   // Turns the whole of storage.local into display rows. Anything that the
   // content script would not accept as a saved pitch is skipped.
@@ -46,9 +55,13 @@
       const savedAt = meta && Number.isFinite(meta.savedAt) ? meta.savedAt : null;
       result.push({ id, pitch, title, savedAt });
     }
-    // Newest first; saves from before titles were recorded have no date and
-    // go last, alphabetically so the order stays stable.
-    return result.sort((a, b) =>
+    return sortSongs(result);
+  }
+
+  // Newest first; saves from before titles were recorded have no date and go
+  // last, alphabetically so the order stays stable.
+  function sortSongs(list) {
+    return list.sort((a, b) =>
       (b.savedAt ?? -Infinity) - (a.savedAt ?? -Infinity)
       || (a.title || '￿').localeCompare(b.title || '￿')
       || a.id.localeCompare(b.id));
@@ -99,9 +112,90 @@
     pitch.className = 'kp-pitch';
     pitch.textContent = formatPitch(song.pitch);
 
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'kp-remove';
+    remove.textContent = '✕';
+    remove.title = 'Remove from saved songs';
+    remove.setAttribute('aria-label', `Remove ${songName(song)} from saved songs`);
+    remove.addEventListener('click', () => removeSong(song, removeButtons.indexOf(remove)));
+    removeButtons.push(remove);
+
     link.append(title, details);
-    item.append(link, pitch);
+    item.append(link, pitch, remove);
     return item;
+  }
+
+  const songName = (song) => (song.title ? `“${song.title}”` : `untitled video ${song.id}`);
+
+  function showNotice(text, canUndo) {
+    els.noticeText.textContent = text;
+    els.undo.hidden = !canUndo;
+    els.notice.hidden = false;
+  }
+
+  function hideNotice() {
+    els.noticeText.textContent = '';
+    els.notice.hidden = true;
+  }
+
+  // Only the latest removal can be undone; a new one makes the last final.
+  async function removeSong(song, index) {
+    if (songs === null) return;
+    // Drop any read already in flight, which could bring the row back; the
+    // change event from this removal triggers a fresh one.
+    loadRequest++;
+    songs = songs.filter((s) => s.id !== song.id);
+    render();
+    focusRemoveButton(Math.min(index, removeButtons.length - 1));
+
+    const done = (async () => {
+      await browserAPI.storage.local.remove([PITCH_PREFIX + song.id, META_PREFIX + song.id]);
+    })();
+    const entry = { song, done };
+    removed = entry;
+    showNotice(`Removed ${songName(song)}.`, true);
+    try {
+      await done;
+    } catch (e) {
+      if (removed === entry) {
+        removed = null;
+        showNotice(`Could not remove ${songName(song)}. Try again.`, false);
+      }
+      load();
+    }
+  }
+
+  // Keeps keyboard users on the list rather than dropping focus to the page.
+  function focusRemoveButton(index) {
+    const target = removeButtons[index] || els.search;
+    if (target.focus) target.focus();
+  }
+
+  async function undoRemove() {
+    const entry = removed;
+    if (!entry) return;
+    removed = null;
+    hideNotice();
+    const { song } = entry;
+    const values = { [PITCH_PREFIX + song.id]: song.pitch };
+    const meta = {};
+    if (song.title) meta.title = song.title;
+    if (song.savedAt !== null) meta.savedAt = song.savedAt;
+    if (Object.keys(meta).length) values[META_PREFIX + song.id] = meta;
+
+    loadRequest++;
+    if (songs !== null) {
+      if (!songs.includes(song)) songs = sortSongs([...songs.filter((s) => s.id !== song.id), song]);
+      focusRemoveButton(render().indexOf(song));
+    }
+    try {
+      await entry.done.catch(() => {});
+      await browserAPI.storage.local.set(values);
+    } catch (e) {
+      showNotice(`Could not restore ${songName(song)}.`, false);
+      load();
+    }
   }
 
   function setStatus(text) {
@@ -115,6 +209,7 @@
     const terms = searchTerms(query);
     const shown = songs.filter((song) => matches(song, terms));
 
+    removeButtons = [];
     els.list.replaceChildren(...shown.map(renderSong));
 
     const total = `${songs.length} saved ${songs.length === 1 ? 'song' : 'songs'}`;
@@ -127,6 +222,7 @@
     } else {
       setStatus('');
     }
+    return shown;
   }
 
   async function load() {
@@ -148,6 +244,7 @@
   }
 
   els.search.addEventListener('input', render);
+  els.undo.addEventListener('click', undoRemove);
 
   els.newTab.addEventListener('change', () => {
     newTab = els.newTab.checked === true;

@@ -761,11 +761,31 @@
     return item;
   }
 
+  // Keeps the Save button in step when this video's save changes elsewhere,
+  // above all when it is removed from the Saved songs page.
+  function followSavedPitchChange(changes) {
+    // A load in progress reads the new value itself; a save in progress
+    // records its own result.
+    if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
+    const pitchChange = changes[savedPitchKey(state.videoId)];
+    const metaChange = changes[savedPitchMetaKey(state.videoId)];
+    if (!pitchChange && !metaChange) return;
+    if (pitchChange) {
+      const pitch = pitchChange.newValue;
+      state.savedPitch = Number.isInteger(pitch) && pitch >= MIN_SEMITONES && pitch <= MAX_SEMITONES
+        ? pitch : null;
+    }
+    if (metaChange) state.savedMeta = validMeta(metaChange.newValue);
+    updateSaveButton();
+  }
+
   function watchSavedSongs() {
     if (!browserAPI || !browserAPI.storage || !browserAPI.storage.onChanged) return;
     browserAPI.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'local') return;
+      followSavedPitchChange(changes);
       // A closed drawer re-reads when it opens; covers savedPitchMeta: too.
-      if (area !== 'local' || !drawer.open) return;
+      if (!drawer.open) return;
       if (Object.keys(changes).some((key) => key.startsWith('savedPitch'))) loadDrawer();
     });
   }
