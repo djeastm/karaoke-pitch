@@ -293,37 +293,6 @@ test('opening a 0.3.0 save fills in its title without any click', async () => {
   assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_A}`] }, { title: 'Old favourite' });
 });
 
-test('Save stays clickable when the pitch matches a save that has no title', async () => {
-  // The tab title is enough for Save, though not for the automatic fill-in.
-  const app = await setup({ semitones: -3, [`savedPitch:${VIDEO_A}`]: -3 }, {}, {
-    page: { title: 'Untitled until now - YouTube' },
-  });
-  assert.equal(app.slider.value, '-3');
-  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`], undefined);
-  assert.equal(app.save.textContent, 'Save');
-  assert.equal(app.save.disabled, false);
-  assert.match(app.save.title, /title with its saved pitch of -3 st/);
-
-  app.save.emit('click');
-  await flush();
-  assert.equal(app.slider.value, '-3');
-  assert.equal(app.stored[`savedPitch:${VIDEO_A}`], -3);
-  assert.equal(app.stored[`savedPitchMeta:${VIDEO_A}`].title, 'Untitled until now');
-  assert.equal(app.save.textContent, 'Saved ✓');
-  assert.equal(app.save.disabled, true);
-});
-
-test('with no title to offer, a matching untitled save is just Saved ✓', async () => {
-  const app = await setup({ semitones: 2, [`savedPitch:${VIDEO_A}`]: 2 }, {}, { page: { title: 'YouTube' } });
-  assert.equal(app.save.textContent, 'Saved ✓');
-  assert.equal(app.save.disabled, true);
-  // Once the page shows one, Save becomes available.
-  app.page.title = 'Late title - YouTube';
-  await app.mutate();
-  assert.equal(app.save.textContent, 'Save');
-  assert.equal(app.save.disabled, false);
-});
-
 test('the title is filled in once the heading for this video arrives', async () => {
   const app = await setup({ [`savedPitch:${VIDEO_A}`]: -1 }, {}, {
     page: { title: 'Old favourite - YouTube' },
@@ -346,11 +315,6 @@ test('navigating to a 0.3.0 save never gives it the previous video’s title', a
   app.page.videoId = VIDEO_B;
   await app.mutate();
   assert.equal(app.stored[`savedPitchMeta:${VIDEO_B}`], undefined);
-  // Save does not offer the lingering title either.
-  app.save.emit('click');
-  app.edit(2);
-  assert.equal(app.save.textContent, 'Saved ✓');
-  assert.equal(app.save.disabled, true);
   app.page.heading = 'Second song';
   await app.mutate();
   assert.deepEqual({ ...app.stored[`savedPitchMeta:${VIDEO_B}`] }, { title: 'Second song' });
@@ -403,8 +367,8 @@ test('☰ toggles a drawer of saved song titles inside the panel, newest first',
   await app.openDrawer();
   assert.equal(app.drawer.hidden, false);
   assert.equal(app.songs.attributes['aria-expanded'], 'true');
-  // The 0.3.0 save without a title (VIDEO_C) is listed last, so it can be visited.
-  assert.deepEqual(titlesOf(app), ['Sunset Boulevard Medley', 'Waterloo Sunset', 'Untitled video']);
+  // The 0.3.0 save without a title (VIDEO_C) is not listed.
+  assert.deepEqual(titlesOf(app), ['Sunset Boulevard Medley', 'Waterloo Sunset']);
   // Titles only: no pitch or date, and links stay on the current tab and host.
   const [first, current] = app.drawerSongs();
   assert.equal(first.href, `/watch?v=${VIDEO_B}`);
@@ -432,7 +396,7 @@ test('the drawer searches titles only, every word, ignoring case', async () => {
   assert.equal(app.drawerStatus.textContent, 'No matches.');
   assert.equal(app.drawerStatus.hidden, false);
   search('');
-  assert.equal(titlesOf(app).length, 3);
+  assert.equal(titlesOf(app).length, 2);
 });
 
 test('typing in the drawer stays out of YouTube’s shortcuts and Escape closes it', async () => {
@@ -475,6 +439,12 @@ test('opening the drawer expands a minimized panel', async () => {
   assert.equal(minimize.attributes['aria-label'], 'Minimize panel');
 });
 
+test('a drawer with only untitled 0.3.0 saves explains where they went', async () => {
+  const app = await setup({ [`savedPitch:${VIDEO_B}`]: 1, [`savedPitch:${VIDEO_C}`]: -1 });
+  await app.openDrawer();
+  assert.deepEqual(titlesOf(app), []);
+  assert.equal(app.drawerStatus.textContent, 'Songs saved before version 0.4 appear here once you play them again.');
+});
 
 test('the drawer reports a storage failure', async () => {
   const app = await setup({}, {

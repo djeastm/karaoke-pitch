@@ -65,6 +65,7 @@
   const drawer = {
     open: false,
     songs: null,
+    untitled: 0,
     request: 0,
     el: null,
     button: null,
@@ -95,16 +96,14 @@
   }
 
   // YouTube swaps the watch page in place, so the heading can briefly belong to
-  // the previous video; only trust it once the page says which video it shows,
-  // and never take the title the previous video was showing.
+  // the previous video; only trust it once the page says which video it shows.
   function currentVideoTitle(videoId) {
     const page = document.querySelector('ytd-watch-flexy[video-id]');
     if (page && page.getAttribute('video-id') === videoId) {
       const heading = collapseSpace(document.querySelector('ytd-watch-metadata h1')?.textContent);
-      if (heading && heading !== state.leftTitle) return heading;
+      if (heading) return heading;
     }
-    const title = cleanDocumentTitle(document.title);
-    return title !== state.leftTitle ? title : '';
+    return cleanDocumentTitle(document.title);
   }
 
   function validMeta(value) {
@@ -143,8 +142,8 @@
   }
 
   // Called on every page change. Saves from 0.3.0 have a pitch but no title,
-  // and are listed as "Untitled video" until they get one, so fill it in as
-  // soon as the video is opened again.
+  // and stay out of the saved songs lists until they get one, so fill it in
+  // as soon as the video is opened again.
   function observeTitle() {
     const videoId = state.videoId;
     if (!videoId || videoId !== currentVideoId()) return;
@@ -161,7 +160,6 @@
     // No savedAt: when the pitch was saved was never recorded.
     const next = { ...meta, title };
     state.savedMeta = next;
-    updateSaveButton();
     try {
       browserAPI.storage.local.set({ [savedPitchMetaKey(videoId)]: next }).catch(() => {});
     } catch (e) {
@@ -213,9 +211,7 @@
       return;
     }
     if (!state.videoId || !state.savedPitchReady || state.savingPitch) return;
-    // When the pitch already matches, a click re-saves it (with this video's
-    // title) rather than restoring a value that is already applied.
-    if (state.restoreSavedPitch && state.savedPitch !== null && state.savedPitch !== state.semitones) {
+    if (state.restoreSavedPitch && state.savedPitch !== null) {
       setSemitones(state.savedPitch);
       return;
     }
@@ -412,8 +408,6 @@
   function checkVideo() {
     syncSavedPitch();
     observeTitle();
-    // Whether Save can add a title depends on what the page shows right now.
-    updateSaveButton();
     const current = findVideo();
     if (current === state.video) return;
     if (state.video && !state.video.isConnected) detachVideo();
@@ -464,10 +458,6 @@
     const hasSavedPitch = state.savedPitch !== null;
     const matches = hasSavedPitch && state.savedPitch === state.semitones;
     const canRestore = hasSavedPitch && state.restoreSavedPitch && !matches;
-    // A save without a title (e.g. from 0.3.0) can be re-saved as it is, to
-    // record the title shown on the page, rather than being "Saved ✓".
-    const canAddTitle = matches && state.savedPitchReady && !state.savedMeta?.title
-      && Boolean(currentVideoTitle(state.videoId));
     let label = 'Save';
     let title = `Save ${formatPitch(state.semitones)} for this video`;
     if (!state.videoId) {
@@ -481,8 +471,6 @@
     } else if (!state.savedPitchReady) {
       label = 'Loading…';
       title = 'Loading saved pitch for this video';
-    } else if (canAddTitle) {
-      title = `Save this video's title with its saved pitch of ${formatPitch(state.savedPitch)}`;
     } else if (matches) {
       label = 'Saved ✓';
       title = `${formatPitch(state.savedPitch)} is saved for this video. Adjust the pitch to save a new value.`;
@@ -495,7 +483,7 @@
     if (button.textContent !== label) button.textContent = label;
     button.title = title;
     button.setAttribute('aria-label', title);
-    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError && !canAddTitle);
+    button.disabled = !state.videoId || !state.savedPitchReady || state.savingPitch || (matches && !state.saveError);
     button.classList.toggle('kp-saved', hasSavedPitch && !state.saveError);
   }
 
@@ -725,27 +713,36 @@
     }
   }
 
+  const OLDER_SAVES_NOTE = 'Songs saved before version 0.4 appear here once you play them again.';
+
   function setDrawerStatus(text) {
     drawer.status.textContent = text;
     drawer.status.hidden = !text;
   }
 
   // Same rules as collectSongs() in saved.js: only entries the panel would
-  // accept as a saved pitch, newest first, undated (0.3.0) saves last.
+  // accept as a saved pitch, newest first, undated (0.3.0) saves last. Saves
+  // without a title are counted but not listed until they are opened again.
   function collectSavedSongs(items) {
     const songs = [];
+    let untitled = 0;
     for (const [key, pitch] of Object.entries(items || {})) {
       if (!key.startsWith('savedPitch:')) continue;
       const id = key.slice('savedPitch:'.length);
       if (!/^[\w-]{11}$/.test(id)) continue;
       if (!Number.isInteger(pitch) || pitch < MIN_SEMITONES || pitch > MAX_SEMITONES) continue;
       const meta = validMeta(items[savedPitchMetaKey(id)]) || {};
-      songs.push({ id, title: meta.title || '', savedAt: meta.savedAt ?? null });
+      if (!meta.title) {
+        untitled += 1;
+        continue;
+      }
+      songs.push({ id, title: meta.title, savedAt: meta.savedAt ?? null });
     }
-    return songs.sort((a, b) =>
+    songs.sort((a, b) =>
       (b.savedAt ?? -Infinity) - (a.savedAt ?? -Infinity)
-      || (a.title || '\uffff').localeCompare(b.title || '\uffff')
+      || a.title.localeCompare(b.title)
       || a.id.localeCompare(b.id));
+    return { songs, untitled };
   }
 
   async function loadDrawer() {
@@ -753,7 +750,7 @@
     try {
       const items = await browserAPI.storage.local.get(null);
       if (request !== drawer.request) return;
-      drawer.songs = collectSavedSongs(items);
+      ({ songs: drawer.songs, untitled: drawer.untitled } = collectSavedSongs(items));
     } catch (e) {
       if (request !== drawer.request) return;
       drawer.songs = null;
@@ -768,11 +765,13 @@
     if (!drawer.open || drawer.songs === null) return;
     const terms = (drawer.search.value || '').toLowerCase().split(/\s+/).filter(Boolean);
     const shown = drawer.songs.filter((song) => {
-      const title = (song.title || 'Untitled video').toLowerCase();
+      const title = song.title.toLowerCase();
       return terms.every((term) => title.includes(term));
     });
     drawer.list.replaceChildren(...shown.map(renderDrawerSong));
-    setDrawerStatus(!drawer.songs.length ? 'No saved songs yet.' : !shown.length ? 'No matches.' : '');
+    setDrawerStatus(!drawer.songs.length
+      ? drawer.untitled ? OLDER_SAVES_NOTE : 'No saved songs yet.'
+      : !shown.length ? 'No matches.' : '');
   }
 
   function renderDrawerSong(song) {
@@ -782,7 +781,7 @@
     link.className = current ? 'kp-drawer-song kp-current' : 'kp-drawer-song';
     // Relative, so m.youtube.com stays on m.youtube.com.
     link.href = `/watch?v=${song.id}`;
-    link.textContent = song.title || 'Untitled video';
+    link.textContent = song.title;
     link.title = link.textContent;
     if (current) link.setAttribute('aria-current', 'true');
     item.append(link);
