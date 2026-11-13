@@ -249,6 +249,12 @@
     padding: 10px 8px;
   }
 
+  /* One row (~35px) shorter than on desktop, so the panel and drawer
+     together leave the video title visible on a phone. */
+  .kp-drawer-list {
+    max-height: min(185px, 40vh);
+  }
+
   .kp-panel {
     width: 290px;
   }
