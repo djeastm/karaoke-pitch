@@ -8,6 +8,11 @@
   --hover: #f1f3f4;
   --accent: #c4002b;
   --pitch-bg: #fce8ec;
+  /* Inverted, so the removal notice stands out against the song rows. */
+  --notice-bg: #323232;
+  --notice-text: #ffffff;
+  --notice-accent: #ff8fa3;
+  --notice-hover: rgba(255, 255, 255, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -20,6 +25,10 @@
     --hover: #2c2c2c;
     --accent: #ff4d6d;
     --pitch-bg: #3a1d24;
+    --notice-bg: #f1f1f1;
+    --notice-text: #1a1a1a;
+    --notice-accent: #c4002b;
+    --notice-hover: rgba(0, 0, 0, 0.08);
   }
 }
 
@@ -209,9 +218,14 @@ h1 {
   gap: 12px;
   margin: 16px 0 0;
   padding: 8px 8px 8px 16px;
-  border: 1px solid var(--border);
   border-radius: 10px;
-  background: var(--card);
+  background: var(--notice-bg);
+  color: var(--notice-text);
+  /* Stays in view when the user has scrolled down the list to remove a song. */
+  position: sticky;
+  top: 8px;
+  z-index: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
 .kp-notice[hidden],
@@ -230,17 +244,17 @@ h1 {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--accent);
+  color: var(--notice-accent);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
 }
 
 .kp-undo:hover {
-  background: var(--hover);
+  background: var(--notice-hover);
 }
 
 .kp-undo:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--notice-accent);
   outline-offset: 0;
 }
